@@ -81,11 +81,13 @@
         </exec>
     </target>
 
-    <!--  Reference (Ref) Step - runs after API and before Product -->
+    <!-- 🔗 Reference step: link API to product (between API and Product steps) -->
     <target name="ref-process" depends="api-process">
-        <echo message="📑 Processing Reference (ref) for ${API_NAME}:${API_VERSION}"/>
+        <echo message="🔗 Adding reference for API ${API_NAME}:${API_VERSION} to Product ${PRODUCT_NAME}"/>
         <exec executable="apic" failonerror="true">
-            <arg value="draft-apis:replace"/>
+            <arg value="draft-products:set-refs"/>
+            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="--ref"/>
             <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
             <arg value="--server"/>
             <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
@@ -94,7 +96,7 @@
         </exec>
     </target>
 
-    <!--  Process Product  -->
+    <!--  Process Product (depends on ref-process) -->
     <target name="product-check" depends="ref-process">
         <echo message="🔎 Checking if Product exists..."/>
         <exec executable="apic" failonerror="false" outputproperty="product.exists">
@@ -166,13 +168,10 @@
         <tstamp>
             <format property="build.timestamp" pattern="yyyy-MM-dd_HH-mm-ss"/>
         </tstamp>
-
         <mkdir dir="apis/${API_NAME}"/>
         <mkdir dir="products/${PRODUCT_NAME}"/>
-
         <copy file="apis/${API_NAME}_${API_VERSION}.yaml" todir="apis/${API_NAME}" overwrite="true"/>
         <copy file="products/${PRODUCT_NAME}_${API_VERSION}.yaml" todir="products/${PRODUCT_NAME}" overwrite="true"/>
-
         <exec executable="git" failonerror="true">
             <arg value="add"/>
             <arg value="."/>
@@ -193,5 +192,4 @@
     <target name="ci" depends="backup">
         <echo message="🎉 CI/CD pipeline completed successfully with backup!"/>
     </target>
-
 </project>
