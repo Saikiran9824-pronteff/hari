@@ -4,6 +4,8 @@
     <property name="API_VERSION" value="1.0.0"/>
     <property name="PRODUCT_NAME" value="loan-product"/>
     <property name="CATALOG_NAME" value="prod"/>
+    <property name="APIS_DIR" value="apis"/>
+    <property name="PRODUCTS_DIR" value="products"/>
 
     <!--  Hardcoded APIC login details  -->
     <target name="login">
@@ -26,7 +28,7 @@
         <echo message="✅ Validating API YAML for ${API_NAME}_${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="validate"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
@@ -60,7 +62,7 @@
         <echo message="🆕 Creating new draft API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:create"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
             <arg value="--server"/>
             <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
             <arg value="--org"/>
@@ -77,21 +79,60 @@
             <arg value="--org"/>
             <arg value="indusapi-np"/>
             <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
-    <!--  Inject API Reference into Product YAML -->
-    <target name="ref-patch" depends="api-process">
-        <echo message="🔗 Ensuring Product YAML has reference to ${API_NAME}:${API_VERSION}"/>
+    <!--  Fix $ref paths inside Product YAML  -->
+    <target name="ref-fix" depends="api-process">
+        <echo message="🛠️ Fixing $ref paths in Product YAMLs..."/>
         <exec executable="sh" failonerror="true">
             <arg value="-c"/>
-            <arg value="grep -q '${API_NAME}:${API_VERSION}' products/${PRODUCT_NAME}_${API_VERSION}.yaml || echo '  - ${API_NAME}:${API_VERSION}' >> products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value='
+              find "${PRODUCTS_DIR}" -type f -name "*.yaml" | sort | while read -r product; do
+                awk "
+                  {
+                    if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
+                     || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
+                      sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
+                    }
+                    print
+                  }
+                " \"\${product}\" > \"\${product}.tmp\" && mv \"\${product}.tmp\" \"\${product}\"
+              done
+
+              echo "🔎 Checking references..."
+              missing=false
+              while IFS= read -r ref; do
+                path=\"\${ref#*:}\"
+                path=\"\$(echo \"\${path}\" | awk \"{\$1=\$1;print}\")\"
+                [ -z \"\${path}\" ] && continue
+                case \"\${path}\" in
+                  ../apis/*)
+                    file=\"\${path#../apis/}\"
+                    if [ ! -f "${APIS_DIR}/\${file}" ]; then
+                      echo "ERROR: Missing API file: ${APIS_DIR}/\${file}"
+                      missing=true
+                    fi
+                    ;;
+                  /*|../*) ;;
+                  *)
+                    echo "ERROR: Unfixed \$ref points to '\${path}'"
+                    missing=true
+                    ;;
+                esac
+              done < <(grep -hR "^\s*\\$ref:" "${PRODUCTS_DIR}" | sed -E "s/[[:space:]]+#.*\$//")
+
+              if [ "\${missing}" = true ]; then
+                echo "Reference check failed. Aborting."
+                exit 1
+              fi
+            '/>
         </exec>
     </target>
 
-    <!--  Process Product  -->
-    <target name="product-check" depends="ref-patch">
+    <!--  Check Product existence  -->
+    <target name="product-check" depends="ref-fix">
         <echo message="🔎 Checking if Product exists..."/>
         <exec executable="apic" failonerror="false" outputproperty="product.exists">
             <arg value="draft-products:get"/>
@@ -119,7 +160,7 @@
         <echo message="🆕 Creating new draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-products:create"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
             <arg value="--server"/>
             <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
             <arg value="--org"/>
@@ -136,7 +177,7 @@
             <arg value="--org"/>
             <arg value="indusapi-np"/>
             <arg value="${PRODUCT_NAME}:${API_VERSION}"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
@@ -145,7 +186,7 @@
         <echo message="🚀 Publishing Product ${PRODUCT_NAME}_${API_VERSION}.yaml to catalog ${CATALOG_NAME}"/>
         <exec executable="apic" failonerror="true">
             <arg value="products:publish"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
             <arg value="--scope"/>
             <arg value="catalog"/>
             <arg value="--catalog"/>
@@ -162,10 +203,10 @@
         <tstamp>
             <format property="build.timestamp" pattern="yyyy-MM-dd_HH-mm-ss"/>
         </tstamp>
-        <mkdir dir="apis/${API_NAME}"/>
-        <mkdir dir="products/${PRODUCT_NAME}"/>
-        <copy file="apis/${API_NAME}_${API_VERSION}.yaml" todir="apis/${API_NAME}" overwrite="true"/>
-        <copy file="products/${PRODUCT_NAME}_${API_VERSION}.yaml" todir="products/${PRODUCT_NAME}" overwrite="true"/>
+        <mkdir dir="${APIS_DIR}/${API_NAME}"/>
+        <mkdir dir="${PRODUCTS_DIR}/${PRODUCT_NAME}"/>
+        <copy file="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml" todir="${APIS_DIR}/${API_NAME}" overwrite="true"/>
+        <copy file="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml" todir="${PRODUCTS_DIR}/${PRODUCT_NAME}" overwrite="true"/>
         <exec executable="git" failonerror="true">
             <arg value="add"/>
             <arg value="."/>
