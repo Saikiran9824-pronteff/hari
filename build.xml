@@ -163,7 +163,7 @@
 <arg value="commit"/>
 <arg value="-m"/>
 <!--  Escape & as &amp;  -->
-<arg value="Backup ${API_NAME}:${API_VERSION} & ${PRODUCT_NAME}:${API_VERSION} at ${build.timestamp}"/>
+<arg value="Backup ${API_NAME}:${API_VERSION} &amp; ${PRODUCT_NAME}:${API_VERSION} at ${build.timestamp}"/>
 </exec>
 <exec executable="git" failonerror="true">
 <arg value="push"/>
