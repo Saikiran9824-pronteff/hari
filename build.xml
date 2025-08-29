@@ -81,6 +81,54 @@
         </exec>
     </target>
 
+    <!-- Fix $ref paths in Product YAMLs -->
+    <target name="fix-product-refs" depends="api-process">
+        <echo message="🔧 Fixing $ref paths in product YAMLs..."/>
+        <exec executable="bash" failonerror="true">
+            <arg value="-c"/>
+            <arg value='
+                find products -type f -name "*.yaml" | sort | while read -r product; do
+                  awk "
+                    {
+                      if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
+                       || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
+                        sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
+                      }
+                      print
+                    }
+                  " \"\${product}\" > \"\${product}.tmp\" && mv \"\${product}.tmp\" \"\${product}\"
+                done
+
+                echo "🔍 Checking references..."
+                missing=false
+                while IFS= read -r ref; do
+                  path="\${ref#*:}"
+                  path="\$(echo \"\${path}\" | awk '\''{\$1=\$1;print}'\'')"
+                  [ -z "\${path}" ] && continue
+                  case "\${path}" in
+                    ../apis/*)
+                      file="\${path#../apis/}"
+                      if [ ! -f "apis/\${file}" ]; then
+                        echo "ERROR: Missing API file: apis/\${file}"
+                        missing=true
+                      fi
+                      ;;
+                    /*|../*) ;;
+                    *)
+                      echo "ERROR: Unfixed \$ref points to \${path}"
+                      missing=true
+                      ;;
+                  esac
+                done < <(grep -hR "^\s*\$ref:" products | sed -E "s/[[:space:]]+#.*$//")
+
+                if [ "\${missing}" = true ]; then
+                  echo "Reference check failed. Aborting."
+                  exit 1
+                fi
+            '/>
+        </exec>
+    </target>
+
     <!-- Process Product -->
     <target name="product-check" depends="api-process">
         <echo message="🔎 Checking if Product exists..."/>
@@ -107,7 +155,7 @@
         <antcall target="product-create"/>
     </target>
 
-    <target name="product-create" unless="product.exists.true">
+    <target name="product-create" unless="product.exists.true" depends="fix-product-refs">
         <echo message="🆕 Creating new draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-products:create"/>
@@ -119,7 +167,7 @@
         </exec>
     </target>
 
-    <target name="product-update" if="product.exists.true">
+    <target name="product-update" if="product.exists.true" depends="fix-product-refs">
         <echo message="♻️ Updating existing draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-products:update"/>
@@ -136,7 +184,6 @@
     <target name="publish" depends="product-process">
         <echo message="🚀 Publishing Product ${PRODUCT_NAME}_${API_VERSION}.yaml to catalog ${CATALOG_NAME}"/>
         <exec executable="apic" failonerror="true">
-            <arg value="products:publish"/>
             <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
             <arg value="--scope"/>
             <arg value="catalog"/>
@@ -175,7 +222,6 @@
         <exec executable="git" failonerror="true">
             <arg value="commit"/>
             <arg value="-m"/>
-            <!-- Escape & as &amp; -->
             <arg value="Backup ${API_NAME}:${API_VERSION} &amp; ${PRODUCT_NAME}:${API_VERSION} at ${build.timestamp}"/>
         </exec>
         <exec executable="git" failonerror="true">
