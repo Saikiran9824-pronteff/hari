@@ -73,26 +73,6 @@
 <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
 </exec>
 </target>
-<target name="fix-product-refs">
-        <echo message="🔧 Fixing $ref paths in product YAMLs..." />
-        <exec executable="bash">
-            <arg value="-c" />
-            <arg value='
-              find "${WORKSPACE}/products" -type f -name "*.yaml" | sort | while read -r product; do
-                awk "
-                  {
-                    if (\$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[^\.\/][A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ \
-                     || \$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ ) {
-                      sub(/\\$ref:[[:space:]]*/, \"&amp;../apis/\");
-                    }
-                    print
-                  }
-                " \"\${product}\" > \"\${product}.tmp\" &amp;&amp; mv \"\${product}.tmp\" \"\${product}\"
-              done
-            ' />
-        </exec>
-        <echo message="✅ Product references fixed to point to ../apis/" />
-</target>
 <!--  Process Product  -->
 <target name="product-check" depends="api-process">
 <echo message="🔎 Checking if Product exists..."/>
@@ -116,6 +96,27 @@
 <antcall target="product-update"/>
 <antcall target="product-create"/>
 </target>
+<target name="fix-product-refs">
+        <echo message="🔧 Fixing $ref paths in product YAMLs..." />
+        <exec executable="bash">
+            <arg value="-c" />
+            <arg value='
+              find "${WORKSPACE}/products" -type f -name "*.yaml" | sort | while read -r product; do
+                awk "
+                  {
+                    if (\$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[^\.\/][A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ \
+                     || \$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ ) {
+                      sub(/\\$ref:[[:space:]]*/, \"&amp;../apis/\");
+                    }
+                    print
+                  }
+                " \"\${product}\" > \"\${product}.tmp\" &amp;&amp; mv \"\${product}.tmp\" \"\${product}\"
+              done
+            ' />
+        </exec>
+        <echo message="✅ Product references fixed to point to ../apis/" />
+</target>
+
 <target name="product-create" unless="product.exists.true">
 <echo message="🆕 Creating new draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
 <exec executable="apic" failonerror="true">
