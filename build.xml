@@ -72,13 +72,25 @@
 <arg value="${API_NAME}:${API_VERSION}"/>
 <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
 </exec>
-</target>
-<target name="ref-patch">
-    <echo message="🔗 Adding API reference ${api.name}:${api.version} to Product ${product.name}"/>
-    <exec executable="sh">
-        <arg value="-c"/>
-        <arg value="grep '${api.name}:${api.version}' ${product.file} || echo 'apis:\n  ${api.name}${api.version}:\n    name: ${api.name}:${api.version}' >> ${product.file}"/>
-    </exec>
+<target name="fix-product-refs">
+        <echo message="🔧 Fixing $ref paths in product YAMLs..." />
+        <exec executable="bash">
+            <arg value="-c" />
+            <arg value='
+              find "${WORKSPACE}/products" -type f -name "*.yaml" | sort | while read -r product; do
+                awk "
+                  {
+                    if (\$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[^\.\/][A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ \
+                     || \$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ ) {
+                      sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
+                    }
+                    print
+                  }
+                " \"\${product}\" > \"\${product}.tmp\" && mv \"\${product}.tmp\" \"\${product}\"
+              done
+            ' />
+        </exec>
+        <echo message="✅ Product references fixed to point to ../apis/" />
 </target>
 <!--  Process Product  -->
 <target name="product-check" depends="api-process">
