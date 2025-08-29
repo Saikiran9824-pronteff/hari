@@ -1,48 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="apic-cicd" default="ci" basedir=".">
+<project name="apic-cicd-pipeline" default="ci" basedir=".">
 
-    <!-- ================= Properties ================= -->
-    <property name="env" value="dev"/>
-    <property name="CATALOG_NAME" value="prod"/>
-    <property name="API_NAME" value="loan-api"/>
-    <property name="API_VERSION" value="1.0.0"/>
-    <property name="PRODUCT_NAME" value="loan-product"/>
-    <property name="publish" value="true"/>
-
+    <!-- ===== Properties ===== -->
+    <property environment="env"/>
     <property name="apis-dir" value="apis"/>
     <property name="products-dir" value="products"/>
 
-    <!-- ================= Validate API ================= -->
-    <target name="validate-api">
+    <!-- ===== Target: CI Pipeline ===== -->
+    <target name="ci" depends="validate,api-draft,fix-product-refs,product-draft,publish"/>
+
+    <!-- ===== Target: Validate APIs ===== -->
+    <target name="validate">
         <echo message="✅ Validating API YAML for ${API_NAME}"/>
-        <exec executable="apic" failonerror="true">
+        <exec executable="apic">
             <arg value="validate"/>
             <arg value="${apis-dir}/${API_NAME}.yaml"/>
         </exec>
     </target>
 
-    <!-- ================= Create Draft API ================= -->
-    <target name="api-draft" depends="validate-api">
+    <!-- ===== Target: Create or Update Draft API ===== -->
+    <target name="api-draft">
         <echo message="📦 Creating or Updating draft API ${API_NAME}:${API_VERSION}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="drafts:create"/>
+        <exec executable="apic">
+            <arg value="drafts:replace"/>
             <arg value="${apis-dir}/${API_NAME}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://api-manager.${env}.company.com"/>
-            <arg value="--org"/>
-            <arg value="org-name"/>
-            <arg value="--catalog"/>
-            <arg value="${CATALOG_NAME}"/>
+            <arg value="--organization=${env}"/>
+            <arg value="--server=${APIC_SERVER}"/>
+            <arg value="--api-version=${API_VERSION}"/>
         </exec>
     </target>
 
-    <!-- ================= Fix $ref Paths in Product YAMLs ================= -->
-    <target name="fix-product-refs" depends="api-draft">
-        <exec executable="bash" failonerror="true">
+    <!-- ===== Target: Fix $ref Paths in Product YAMLs ===== -->
+    <target name="fix-product-refs">
+        <echo message="🔧 Fixing $ref paths in product YAMLs..."/>
+        <exec executable="bash">
             <arg value="-c"/>
             <arg value='
-                echo "Fixing $ref paths in product YAMLs...";
-                find ${products-dir} -type f -name "*.yaml" | sort | while read -r product; do
+                find "${products-dir}" -type f -name "*.yaml" | sort | while read -r product; do
                   awk "
                     {
                       if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
@@ -51,72 +45,59 @@
                       }
                       print
                     }
-                  " \"\${product}\" > \"\${product}.tmp\" && mv \"\${product}.tmp\" \"\${product}\"
+                  " "${product}" > "${product}.tmp" && mv "${product}.tmp" "${product}"
                 done
 
-                echo "Checking references...";
+                echo "🔍 Checking references..."
                 missing=false
                 while IFS= read -r ref; do
-                  path=\"${ref#*:}\"
-                  path=\"$(echo "${path}" | awk '\''{$1=$1;print}'\'')\"
+                  path="${ref#*:}"
+                  path="$(echo "${path}" | awk "{\$1=\$1;print}")"
                   [ -z "${path}" ] && continue
                   case "${path}" in
                     ../apis/*)
                       file="${path#../apis/}"
                       if [ ! -f "${apis-dir}/${file}" ]; then
-                        echo "ERROR: Missing API file: ${apis-dir}/${file}"
+                        echo "❌ ERROR: Missing API file: ${apis-dir}/${file}"
                         missing=true
                       fi
                       ;;
                     /*|../*) ;;
                     *)
-                      echo "ERROR: Unfixed $ref points to '${path}'"
+                      echo "❌ ERROR: Unfixed $ref points to ${path}"
                       missing=true
                       ;;
                   esac
-                done < <(grep -hR "^\s*\$ref:" ${products-dir} | sed -E "s/[[:space:]]+#.*$//")
+                done < <(grep -hR "^\s*\$ref:" "${products-dir}" | sed -E "s/[[:space:]]+#.*$//")
 
                 if [ "${missing}" = true ]; then
-                  echo "Reference check failed. Aborting."
+                  echo "❌ Reference check failed. Aborting."
                   exit 1
                 fi
             '/>
         </exec>
     </target>
 
-    <!-- ================= Create / Update Product ================= -->
-    <target name="product-create" depends="fix-product-refs">
-        <echo message="🚀 Creating or Updating Product ${PRODUCT_NAME}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="products:replace"/>
+    <!-- ===== Target: Create or Update Draft Product ===== -->
+    <target name="product-draft" depends="fix-product-refs">
+        <echo message="📦 Creating or Updating draft Product ${PRODUCT_NAME}"/>
+        <exec executable="apic">
+            <arg value="drafts:replace"/>
             <arg value="${products-dir}/${PRODUCT_NAME}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://api-manager.${env}.company.com"/>
-            <arg value="--org"/>
-            <arg value="org-name"/>
-            <arg value="--catalog"/>
-            <arg value="${CATALOG_NAME}"/>
+            <arg value="--organization=${env}"/>
+            <arg value="--server=${APIC_SERVER}"/>
         </exec>
     </target>
 
-    <!-- ================= Publish ================= -->
-    <target name="publish-product" depends="product-create" if="publish">
-        <echo message="🌍 Publishing Product ${PRODUCT_NAME}"/>
-        <exec executable="apic" failonerror="true">
+    <!-- ===== Target: Publish Product ===== -->
+    <target name="publish">
+        <echo message="🚀 Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}"/>
+        <exec executable="apic">
             <arg value="products:publish"/>
             <arg value="${products-dir}/${PRODUCT_NAME}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://api-manager.${env}.company.com"/>
-            <arg value="--org"/>
-            <arg value="org-name"/>
-            <arg value="--catalog"/>
-            <arg value="${CATALOG_NAME}"/>
+            <arg value="--catalog=${CATALOG_NAME}"/>
+            <arg value="--server=${APIC_SERVER}"/>
         </exec>
-    </target>
-
-    <!-- ================= CI Pipeline ================= -->
-    <target name="ci" depends="publish-product">
-        <echo message="✅ CI/CD Pipeline completed successfully for ${API_NAME}:${API_VERSION}"/>
     </target>
 
 </project>
