@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="apic-cicd" default="ci" basedir=".">
+<project name="apic-ci-cd" default="ci">
 
   <!-- ========= PROPERTIES ========= -->
-  <property name="apic.host" value="https://apic-server.example.com"/>
-  <property name="org" value="myorg"/>
+  <property name="org" value="indusapi"/>
   <property name="catalog" value="${CATALOG_NAME}"/>
   <property name="api" value="apis/${API_NAME}_${API_VERSION}.yaml"/>
   <property name="product" value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
 
-  <!-- ========= TARGETS ========= -->
-
-  <!-- Validate API YAML -->
+  <!-- ========= VALIDATION ========= -->
   <target name="validate">
     <echo message="✅ Validating API YAML for ${API_NAME}"/>
     <exec executable="apic">
@@ -19,63 +16,62 @@
     </exec>
   </target>
 
-  <!-- Create or Update Draft API -->
-  <target name="api-draft" depends="validate">
-    <echo message="📦 Creating or Updating draft API ${API_NAME}:${API_VERSION}"/>
-    <exec executable="apic">
-      <arg value="drafts:create"/>
-      <arg value="${api}"/>
-      <arg value="--server"/>
-      <arg value="${apic.host}"/>
-      <arg value="--org"/>
-      <arg value="${org}"/>
-      <arg value="--api-version"/>
-      <arg value="${API_VERSION}"/>
-    </exec>
-  </target>
-
-  <!-- Update $ref paths in product file -->
+  <!-- ========= REF UPDATE ========= -->
   <target name="ref-update">
     <echo message="🔧 Updating $ref paths in product file: ${product}"/>
     <exec executable="bash">
-      <arg value="-c"/>
-      <arg value="product='${product}'; awk '{ if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]+\\.yaml/){ sub(/\\$ref:[[:space:]]*/, \"\\$ref: ../apis/\"); } print }' &quot;${product}&quot; > &quot;${product}.tmp&quot; &amp;&amp; mv &quot;${product}.tmp&quot; &quot;${product}&quot;"/>
+      <arg line="-c 'product=&quot;${product}&quot;; awk &apos;{ if ($0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]+\\.yaml/){ sub(/\\$ref:[[:space:]]*/, &quot;\\$ref: ../apis/&quot;); } print }&apos; &quot;${product}&quot; &gt; &quot;${product}.tmp&quot; &amp;&amp; mv &quot;${product}.tmp&quot; &quot;${product}&quot;'"/>
     </exec>
   </target>
 
-  <!-- Create or Update Draft Product -->
-  <target name="product-draft" depends="ref-update">
-    <echo message="📦 Creating or Updating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
+  <!-- ========= API DRAFT ========= -->
+  <target name="api-draft" depends="validate">
+    <echo message="📦 Creating or Updating draft API ${API_NAME}:${API_VERSION}"/>
     <exec executable="apic">
-      <arg value="drafts:create"/>
-      <arg value="${product}"/>
+      <arg value="drafts:apis:create"/>
       <arg value="--server"/>
-      <arg value="${apic.host}"/>
+      <arg value="https://api-manager.indusind.com"/>
       <arg value="--org"/>
       <arg value="${org}"/>
-      <arg value="--product-version"/>
-      <arg value="${API_VERSION}"/>
+      <arg value="${api}"/>
+      <arg value="--catalog"/>
+      <arg value="${catalog}"/>
     </exec>
   </target>
 
-  <!-- Publish Product to Catalog -->
-  <target name="publish" depends="product-draft">
-    <echo message="🚀 Publishing Product ${PRODUCT_NAME}:${API_VERSION} to catalog ${catalog}"/>
+  <!-- ========= PRODUCT DRAFT ========= -->
+  <target name="product-draft" depends="ref-update,api-draft">
+    <echo message="📦 Creating or Updating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
     <exec executable="apic">
-      <arg value="publish"/>
+      <arg value="drafts:products:create"/>
+      <arg value="--server"/>
+      <arg value="https://api-manager.indusind.com"/>
+      <arg value="--org"/>
+      <arg value="${org}"/>
       <arg value="${product}"/>
       <arg value="--catalog"/>
       <arg value="${catalog}"/>
-      <arg value="--server"/>
-      <arg value="${apic.host}"/>
-      <arg value="--org"/>
-      <arg value="${org}"/>
     </exec>
   </target>
 
-  <!-- CI Entry Point -->
-  <target name="ci" depends="api-draft,product-draft,publish">
-    <echo message="✅ CI pipeline completed for ${API_NAME}:${API_VERSION}"/>
+  <!-- ========= PUBLISH ========= -->
+  <target name="publish" depends="product-draft">
+    <echo message="🚀 Publishing Product ${PRODUCT_NAME}:${API_VERSION} to catalog ${catalog}"/>
+    <exec executable="apic">
+      <arg value="products:publish"/>
+      <arg value="--server"/>
+      <arg value="https://api-manager.indusind.com"/>
+      <arg value="--org"/>
+      <arg value="${org}"/>
+      <arg value="${product}"/>
+      <arg value="--catalog"/>
+      <arg value="${catalog}"/>
+    </exec>
+  </target>
+
+  <!-- ========= CI PIPELINE ========= -->
+  <target name="ci" depends="publish">
+    <echo message="✅ CI Pipeline completed for ${API_NAME}:${API_VERSION}"/>
   </target>
 
 </project>
