@@ -81,23 +81,17 @@
         </exec>
     </target>
 
-    <!-- 🔗 Reference step: link API to product (between API and Product steps) -->
-    <target name="ref-process" depends="api-process">
-        <echo message="🔗 Adding reference for API ${API_NAME}:${API_VERSION} to Product ${PRODUCT_NAME}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="draft-products:set-refs"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--ref"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+    <!--  Inject API Reference into Product YAML -->
+    <target name="ref-patch" depends="api-process">
+        <echo message="🔗 Ensuring Product YAML has reference to ${API_NAME}:${API_VERSION}"/>
+        <exec executable="sh" failonerror="true">
+            <arg value="-c"/>
+            <arg value="grep -q '${API_NAME}:${API_VERSION}' products/${PRODUCT_NAME}_${API_VERSION}.yaml || echo '  - ${API_NAME}:${API_VERSION}' >> products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
-    <!--  Process Product (depends on ref-process) -->
-    <target name="product-check" depends="ref-process">
+    <!--  Process Product  -->
+    <target name="product-check" depends="ref-patch">
         <echo message="🔎 Checking if Product exists..."/>
         <exec executable="apic" failonerror="false" outputproperty="product.exists">
             <arg value="draft-products:get"/>
@@ -192,4 +186,5 @@
     <target name="ci" depends="backup">
         <echo message="🎉 CI/CD pipeline completed successfully with backup!"/>
     </target>
+
 </project>
