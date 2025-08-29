@@ -39,19 +39,11 @@
     <echo message="🔧 Updating $ref paths in product file: ${product}"/>
     <exec executable="bash">
       <arg value="-c"/>
-      <arg value="product='${product}'; awk '
-        {
-          if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
-           || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
-            sub(/\\$ref:[[:space:]]*/, \"&amp;../apis/\");
-          }
-          print
-        }
-      ' \"${product}\" > \"${product}.tmp\" &amp;&amp; mv \"${product}.tmp\" \"${product}\""/>
+      <arg value="product='${product}'; awk '{ if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]+\\.yaml/){ sub(/\\$ref:[[:space:]]*/, \"\\$ref: ../apis/\"); } print }' &quot;${product}&quot; > &quot;${product}.tmp&quot; &amp;&amp; mv &quot;${product}.tmp&quot; &quot;${product}&quot;"/>
     </exec>
   </target>
 
-  <!-- Create or Update Draft Product (after ref-update) -->
+  <!-- Create or Update Draft Product -->
   <target name="product-draft" depends="ref-update">
     <echo message="📦 Creating or Updating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
     <exec executable="apic">
