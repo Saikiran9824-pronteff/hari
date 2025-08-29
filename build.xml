@@ -72,6 +72,7 @@
 <arg value="${API_NAME}:${API_VERSION}"/>
 <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
 </exec>
+</target>
 <target name="fix-product-refs">
         <echo message="🔧 Fixing $ref paths in product YAMLs..." />
         <exec executable="bash">
