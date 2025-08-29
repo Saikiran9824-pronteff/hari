@@ -1,125 +1,89 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="apic-cicd" default="ci">
+<project name="apic-cicd" default="ci" basedir=".">
 
-  <!-- ===============================
-       Properties
-  =============================== -->
-  <property name="org" value="indusapi"/>
+  <!-- ========= PROPERTIES ========= -->
+  <property name="apic.host" value="https://apic-server.example.com"/>
+  <property name="org" value="myorg"/>
   <property name="catalog" value="${CATALOG_NAME}"/>
-  <property name="api" value="${API_NAME}"/>
-  <property name="product" value="${PRODUCT_NAME}.yaml"/>
-  <property name="api_version" value="${API_VERSION}"/>
-  <property name="env" value="${env}"/>
-  <property name="publish" value="${publish}"/>
+  <property name="api" value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+  <property name="product" value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
 
-  <!-- ===============================
-       CI Main Flow
-  =============================== -->
-  <target name="ci">
-    <antcall target="validate"/>
-    <antcall target="ref-update"/>
-    <antcall target="api-draft"/>
-    <antcall target="product-create-update"/>
-    <antcall target="product-publish"/>
-  </target>
+  <!-- ========= TARGETS ========= -->
 
-  <!-- ===============================
-       API Validation
-  =============================== -->
+  <!-- Validate API YAML -->
   <target name="validate">
-    <echo message="✅ Validating API YAML for ${api}"/>
+    <echo message="✅ Validating API YAML for ${API_NAME}"/>
     <exec executable="apic">
-      <arg value="apis:validate"/>
-      <arg value="apis/${api}.yaml"/>
+      <arg value="validate"/>
+      <arg value="${api}"/>
     </exec>
   </target>
 
-  <!-- ===============================
-       Fix $ref Paths in Product YAML
-  =============================== -->
+  <!-- Create or Update Draft API -->
+  <target name="api-draft" depends="validate">
+    <echo message="📦 Creating or Updating draft API ${API_NAME}:${API_VERSION}"/>
+    <exec executable="apic">
+      <arg value="drafts:create"/>
+      <arg value="${api}"/>
+      <arg value="--server"/>
+      <arg value="${apic.host}"/>
+      <arg value="--org"/>
+      <arg value="${org}"/>
+      <arg value="--api-version"/>
+      <arg value="${API_VERSION}"/>
+    </exec>
+  </target>
+
+  <!-- Update $ref paths in product file -->
   <target name="ref-update">
     <echo message="🔧 Updating $ref paths in product file: ${product}"/>
     <exec executable="bash">
       <arg value="-c"/>
-      <arg value="
-        product='${product}';
-        awk '
-          {
-            if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
-             || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
-              sub(/\\$ref:[[:space:]]*/, \"&amp;amp;../apis/\");
-            }
-            print
+      <arg value="product='${product}'; awk '
+        {
+          if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
+           || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
+            sub(/\\$ref:[[:space:]]*/, \"&amp;../apis/\");
           }
-        ' \"${product}\" > \"${product}.tmp\" && mv \"${product}.tmp\" \"${product}\"
-      "/>
+          print
+        }
+      ' \"${product}\" > \"${product}.tmp\" &amp;&amp; mv \"${product}.tmp\" \"${product}\""/>
     </exec>
   </target>
 
-  <!-- ===============================
-       API Draft Create/Update
-  =============================== -->
-  <target name="api-draft">
-    <echo message="📦 Creating or Updating draft API ${api}:${api_version}"/>
+  <!-- Create or Update Draft Product (after ref-update) -->
+  <target name="product-draft" depends="ref-update">
+    <echo message="📦 Creating or Updating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
     <exec executable="apic">
-      <arg value="apis:create"/>
+      <arg value="drafts:create"/>
+      <arg value="${product}"/>
+      <arg value="--server"/>
+      <arg value="${apic.host}"/>
       <arg value="--org"/>
       <arg value="${org}"/>
-      <arg value="--catalog"/>
-      <arg value="${catalog}"/>
-      <arg value="apis/${api}.yaml"/>
-      <arg value="--server"/>
-      <arg value="https://api-manager.indusind.com"/>
-      <arg value="--api-version"/>
-      <arg value="${api_version}"/>
-      <arg value="--format"/>
-      <arg value="yaml"/>
-      <arg value="--apimanager"/>
-      <arg value="true"/>
-      <arg value="--space"/>
-      <arg value="${env}"/>
-      <arg value="--draft"/>
+      <arg value="--product-version"/>
+      <arg value="${API_VERSION}"/>
     </exec>
   </target>
 
-  <!-- ===============================
-       Product Create or Update
-  =============================== -->
-  <target name="product-create-update">
-    <echo message="📦 Creating or Updating Product ${PRODUCT_NAME}"/>
+  <!-- Publish Product to Catalog -->
+  <target name="publish" depends="product-draft">
+    <echo message="🚀 Publishing Product ${PRODUCT_NAME}:${API_VERSION} to catalog ${catalog}"/>
     <exec executable="apic">
-      <arg value="products:create"/>
-      <arg value="--org"/>
-      <arg value="${org}"/>
+      <arg value="publish"/>
+      <arg value="${product}"/>
       <arg value="--catalog"/>
       <arg value="${catalog}"/>
-      <arg value="products/${product}"/>
       <arg value="--server"/>
-      <arg value="https://api-manager.indusind.com"/>
-      <arg value="--format"/>
-      <arg value="yaml"/>
-      <arg value="--space"/>
-      <arg value="${env}"/>
+      <arg value="${apic.host}"/>
+      <arg value="--org"/>
+      <arg value="${org}"/>
     </exec>
   </target>
 
-  <!-- ===============================
-       Product Publish (Optional)
-  =============================== -->
-  <target name="product-publish" if="publish">
-    <echo message="🚀 Publishing Product ${PRODUCT_NAME} to ${catalog} catalog"/>
-    <exec executable="apic">
-      <arg value="products:publish"/>
-      <arg value="--org"/>
-      <arg value="${org}"/>
-      <arg value="--catalog"/>
-      <arg value="${catalog}"/>
-      <arg value="products/${product}"/>
-      <arg value="--server"/>
-      <arg value="https://api-manager.indusind.com"/>
-      <arg value="--space"/>
-      <arg value="${env}"/>
-    </exec>
+  <!-- CI Entry Point -->
+  <target name="ci" depends="api-draft,product-draft,publish">
+    <echo message="✅ CI pipeline completed for ${API_NAME}:${API_VERSION}"/>
   </target>
 
 </project>
