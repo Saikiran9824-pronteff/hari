@@ -82,11 +82,11 @@
                   {
                     if (\$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[^\.\/][A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ \
                      || \$0 ~ /^[[:space:]]*\$ref:[[:space:]]*[A-Za-z0-9._-]*\.yaml([[:space:]]*(#.*)?)?$/ ) {
-                      sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
+                      sub(/\\$ref:[[:space:]]*/, \"&amp;../apis/\");
                     }
                     print
                   }
-                " \"\${product}\" > \"\${product}.tmp\" && mv \"\${product}.tmp\" \"\${product}\"
+                " \"\${product}\" > \"\${product}.tmp\" &amp;&amp; mv \"\${product}.tmp\" \"\${product}\"
               done
             ' />
         </exec>
