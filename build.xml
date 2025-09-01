@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="apic-cicd" default="ci" basedir=".">
 
-    <property name="API_NAME" value="loan-api"/>
-    <property name="API_VERSION" value="1.0.0"/>
-    <property name="PRODUCT_NAME" value="loan-product"/>
-    <property name="CATALOG_NAME" value="prod"/>
+    <!-- Parameters passed from Jenkins job -->
+    <property name="API_NAME" value="${API_NAME}"/>
+    <property name="API_VERSION" value="${API_VERSION}"/>
+    <property name="PRODUCT_NAME" value="${PRODUCT_NAME}"/>
+    <property name="CATALOG_NAME" value="${CATALOG_NAME}"/>
 
     <!-- =============================== -->
-    <!--  Hardcoded APIC login details  -->
+    <!--  Hardcoded APIC login details   -->
     <!-- =============================== -->
     <target name="login">
         <echo message="🔐 Logging in to API Connect..."/>
@@ -95,7 +96,10 @@
     <!-- =============================== -->
     <target name="fix-product-refs" depends="api-process">
         <echo message="🔧 Fixing product references with script..."/>
-        <exec executable="/var/lib/jenkins/scripts/fix-product-refs.sh" failonerror="true"/>
+        <exec executable="/var/lib/jenkins/scripts/fix-product-refs.sh" failonerror="true">
+            <arg value="${basedir}/products"/>
+            <arg value="${basedir}/apis"/>
+        </exec>
     </target>
 
     <!-- =============================== -->
@@ -170,43 +174,21 @@
     </target>
 
     <!-- =============================== -->
-    <!--  Backup API & Product YAMLs     -->
+    <!--  Backup & CI pipeline           -->
     <!-- =============================== -->
     <target name="backup" depends="publish">
         <tstamp>
             <format property="build.timestamp" pattern="yyyy-MM-dd_HH-mm-ss"/>
         </tstamp>
-
-        <!-- Ensure per-API/Product folders exist -->
         <mkdir dir="apis/${API_NAME}"/>
         <mkdir dir="products/${PRODUCT_NAME}"/>
-
-        <!-- Copy API YAML -->
         <copy file="apis/${API_NAME}_${API_VERSION}.yaml" todir="apis/${API_NAME}" overwrite="true"/>
-
-        <!-- Copy Product YAML -->
         <copy file="products/${PRODUCT_NAME}_${API_VERSION}.yaml" todir="products/${PRODUCT_NAME}" overwrite="true"/>
-
-        <!-- Git commit -->
-        <exec executable="git" failonerror="true">
-            <arg value="add"/>
-            <arg value="."/>
-        </exec>
-        <exec executable="git" failonerror="true">
-            <arg value="commit"/>
-            <arg value="-m"/>
-            <arg value="Backup ${API_NAME}:${API_VERSION} &amp; ${PRODUCT_NAME}:${API_VERSION} at ${build.timestamp}"/>
-        </exec>
-        <exec executable="git" failonerror="true">
-            <arg value="push"/>
-            <arg value="origin"/>
-            <arg value="main"/>
-        </exec>
+        <exec executable="git" failonerror="true"><arg value="add"/><arg value="."/></exec>
+        <exec executable="git" failonerror="true"><arg value="commit"/><arg value="-m"/><arg value="Backup ${API_NAME}:${API_VERSION} &amp; ${PRODUCT_NAME}:${API_VERSION} at ${build.timestamp}"/></exec>
+        <exec executable="git" failonerror="true"><arg value="push"/><arg value="origin"/><arg value="main"/></exec>
     </target>
 
-    <!-- =============================== -->
-    <!--  CI Pipeline                    -->
-    <!-- =============================== -->
     <target name="ci" depends="backup">
         <echo message="🎉 CI/CD pipeline completed successfully with backup!"/>
     </target>
