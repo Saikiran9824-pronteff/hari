@@ -95,7 +95,7 @@
     <!-- =============================== -->
     <target name="fix-product-refs" depends="api-process">
         <echo message="🔧 Fixing product references with script..."/>
-        <exec executable="/root/apic-cicd/scripts/fix-product-refs.sh" failonerror="true"/>
+        <exec executable="/var/lib/jenkins/scripts/fix-product-refs.sh" failonerror="true"/>
     </target>
 
     <!-- =============================== -->
