@@ -2,55 +2,69 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'API_NAME', defaultValue: 'loan-api', description: 'API Name')
-        string(name: 'API_VERSION', defaultValue: '1.0.0', description: 'API Version')
-        string(name: 'PRODUCT_NAME', defaultValue: 'loan-product', description: 'Product Name')
-        string(name: 'CATALOG_NAME', defaultValue: 'sandbox', description: 'Catalog Name')
+        string(name: 'API_NAME', defaultValue: '', description: 'API Name')
+        string(name: 'API_VERSION', defaultValue: '', description: 'API Version')
+        string(name: 'PRODUCT_NAME', defaultValue: '', description: 'Product Name')
+        string(name: 'CATALOG_NAME', defaultValue: '', description: 'Catalog Name')
     }
 
     environment {
         APIC_SERVER = "https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"
+        APIC_ORG    = "indusapi-np"
         APIC_USER   = "umesh"
         APIC_PASS   = "!n0r1t5@C"
-        APIC_ORG    = "indusapi-np"
+        APIC_REALM  = "provider/default-idp-2"
     }
 
     stages {
         stage('Login to API Connect') {
             steps {
-                sh '''
-                  echo "🔐 Logging in to API Connect..."
-                  apic login --server $APIC_SERVER --username $APIC_USER --password $APIC_PASS --realm provider/default-idp-2
-                '''
+                sh """
+                apic login --server $APIC_SERVER \
+                           --username $APIC_USER \
+                           --password $APIC_PASS \
+                           --realm $APIC_REALM
+                """
             }
         }
 
-        stage('Validate API YAML') {
+        stage('Validate API') {
             steps {
-                sh '''
-                  echo "✅ Validating API YAML for ${API_NAME}_${API_VERSION}"
-                  apic validate apis/${API_NAME}_${API_VERSION}.yaml
-                '''
+                sh """
+                echo "✅ Validating API YAML for ${API_NAME}_${API_VERSION}"
+                apic validate apis/${API_NAME}_${API_VERSION}.yaml
+                """
             }
         }
 
-        stage('Process API (Create/Update)') {
+        stage('Check API') {
             steps {
                 script {
-                    def apiCheck = sh(
+                    def apiExists = sh(
                         script: "apic draft-apis:get ${API_NAME}:${API_VERSION} --server $APIC_SERVER --org $APIC_ORG || true",
                         returnStdout: true
                     ).trim()
+                    env.API_EXISTS = apiExists.contains("${API_NAME}:${API_VERSION}") ? "true" : "false"
+                    echo "API exists? ${env.API_EXISTS}"
+                }
+            }
+        }
 
-                    if (apiCheck.contains("${API_NAME}:${API_VERSION}")) {
+        stage('Process API') {
+            steps {
+                script {
+                    if (env.API_EXISTS == "true") {
+                        echo "♻️ Updating existing draft API ${API_NAME}:${API_VERSION}"
                         sh """
-                          echo "♻️ Updating existing draft API ${API_NAME}:${API_VERSION}"
-                          apic draft-apis:update --server $APIC_SERVER --org $APIC_ORG ${API_NAME}:${API_VERSION} apis/${API_NAME}_${API_VERSION}.yaml
+                        apic draft-apis:update --server $APIC_SERVER --org $APIC_ORG \
+                                               ${API_NAME}:${API_VERSION} \
+                                               apis/${API_NAME}_${API_VERSION}.yaml
                         """
                     } else {
+                        echo "🆕 Creating new draft API ${API_NAME}:${API_VERSION}"
                         sh """
-                          echo "🆕 Creating new draft API ${API_NAME}:${API_VERSION}"
-                          apic draft-apis:create apis/${API_NAME}_${API_VERSION}.yaml --server $APIC_SERVER --org $APIC_ORG
+                        apic draft-apis:create apis/${API_NAME}_${API_VERSION}.yaml \
+                                               --server $APIC_SERVER --org $APIC_ORG
                         """
                     }
                 }
@@ -59,30 +73,42 @@ pipeline {
 
         stage('Fix Product References') {
             steps {
-                sh '''
-                  echo "🔧 Fixing product references..."
-                  /var/lib/jenkins/scripts/fix-product-refs.sh products apis
-                '''
+                sh """
+                echo "🔧 Fixing product references with script..."
+                /var/lib/jenkins/scripts/fix-product-refs.sh \\
+                    ${WORKSPACE}/products ${WORKSPACE}/apis
+                """
             }
         }
 
-        stage('Process Product (Create/Update)') {
+        stage('Check Product') {
             steps {
                 script {
-                    def productCheck = sh(
+                    def productExists = sh(
                         script: "apic draft-products:get ${PRODUCT_NAME}:${API_VERSION} --server $APIC_SERVER --org $APIC_ORG || true",
                         returnStdout: true
                     ).trim()
+                    env.PRODUCT_EXISTS = productExists.contains("${PRODUCT_NAME}:${API_VERSION}") ? "true" : "false"
+                    echo "Product exists? ${env.PRODUCT_EXISTS}"
+                }
+            }
+        }
 
-                    if (productCheck.contains("${PRODUCT_NAME}:${API_VERSION}")) {
+        stage('Process Product') {
+            steps {
+                script {
+                    if (env.PRODUCT_EXISTS == "true") {
+                        echo "♻️ Updating existing draft Product ${PRODUCT_NAME}:${API_VERSION}"
                         sh """
-                          echo "♻️ Updating existing draft Product ${PRODUCT_NAME}:${API_VERSION}"
-                          apic draft-products:update --server $APIC_SERVER --org $APIC_ORG ${PRODUCT_NAME}:${API_VERSION} products/${PRODUCT_NAME}_${API_VERSION}.yaml
+                        apic draft-products:update --server $APIC_SERVER --org $APIC_ORG \
+                                                   ${PRODUCT_NAME}:${API_VERSION} \
+                                                   products/${PRODUCT_NAME}_${API_VERSION}.yaml
                         """
                     } else {
+                        echo "🆕 Creating new draft Product ${PRODUCT_NAME}:${API_VERSION}"
                         sh """
-                          echo "🆕 Creating new draft Product ${PRODUCT_NAME}:${API_VERSION}"
-                          apic draft-products:create products/${PRODUCT_NAME}_${API_VERSION}.yaml --server $APIC_SERVER --org $APIC_ORG
+                        apic draft-products:create products/${PRODUCT_NAME}_${API_VERSION}.yaml \
+                                                   --server $APIC_SERVER --org $APIC_ORG
                         """
                     }
                 }
@@ -91,25 +117,35 @@ pipeline {
 
         stage('Publish Product') {
             steps {
-                sh '''
-                  echo "🚀 Publishing Product ${PRODUCT_NAME}_${API_VERSION}.yaml to catalog ${CATALOG_NAME}"
-                  apic products:publish products/${PRODUCT_NAME}_${API_VERSION}.yaml --scope catalog --catalog ${CATALOG_NAME} --server $APIC_SERVER --org $APIC_ORG
-                '''
+                sh """
+                echo "🚀 Publishing Product ${PRODUCT_NAME}_${API_VERSION}.yaml to catalog ${CATALOG_NAME}"
+                apic products:publish products/${PRODUCT_NAME}_${API_VERSION}.yaml \
+                                      --scope catalog \
+                                      --catalog ${CATALOG_NAME} \
+                                      --server $APIC_SERVER \
+                                      --org $APIC_ORG
+                """
             }
         }
 
-        stage('Backup to Git') {
+        stage('Backup & Git Commit') {
             steps {
-                sh '''
-                  echo "📦 Backing up API and Product YAML to Git..."
-                  mkdir -p apis/${API_NAME} products/${PRODUCT_NAME}
-                  cp apis/${API_NAME}_${API_VERSION}.yaml apis/${API_NAME}/
-                  cp products/${PRODUCT_NAME}_${API_VERSION}.yaml products/${PRODUCT_NAME}/
-                  
-                  git add .
-                  git commit -m "Backup ${API_NAME}:${API_VERSION} & ${PRODUCT_NAME}:${API_VERSION} at $(date +%Y-%m-%d_%H-%M-%S)" || true
-                  git push origin main
-                '''
+                script {
+                    def timestamp = sh(
+                        script: "date +%Y-%m-%d_%H-%M-%S",
+                        returnStdout: true
+                    ).trim()
+
+                    sh """
+                    mkdir -p apis/${API_NAME} products/${PRODUCT_NAME}
+                    cp apis/${API_NAME}_${API_VERSION}.yaml apis/${API_NAME}/
+                    cp products/${PRODUCT_NAME}_${API_VERSION}.yaml products/${PRODUCT_NAME}/
+
+                    git add .
+                    git commit -m "Backup ${API_NAME}:${API_VERSION} & ${PRODUCT_NAME}:${API_VERSION} at ${timestamp}" || echo "No changes to commit"
+                    git push origin main
+                    """
+                }
             }
         }
     }
@@ -119,7 +155,7 @@ pipeline {
             echo "🎉 CI/CD pipeline completed successfully with backup!"
         }
         failure {
-            echo "❌ Pipeline failed. Please check logs."
+            echo "❌ CI/CD pipeline failed!"
         }
     }
 }
