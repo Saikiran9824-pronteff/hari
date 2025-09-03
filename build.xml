@@ -46,46 +46,58 @@
         </foreach>
     </target>
 
-    <target name="process-api">
-        <!-- get basename without extension (e.g. hello_1.0.0) -->
-        <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
+<target name="process-api">
+    <!-- Get filename without extension -->
+    <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
 
-        <!-- split into API_NAME and API_VERSION using regex -->
-        <propertyregex property="API_NAME"
-                       input="${apiBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\1"/>
+    <!-- Split name and version by underscore -->
+    <pathconvert property="API_NAME">
+        <mapper type="regexp" from="^([^_]+)_(.*)$" to="\1"/>
+        <path>
+            <pathelement location="${apiBase}"/>
+        </path>
+    </pathconvert>
 
-        <propertyregex property="API_VERSION"
-                       input="${apiBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\2"/>
+    <pathconvert property="API_VERSION">
+        <mapper type="regexp" from="^([^_]+)_(.*)$" to="\2"/>
+        <path>
+            <pathelement location="${apiBase}"/>
+        </path>
+    </pathconvert>
 
-        <echo message="➡️ Processing API file: ${apiFile} -> ${API_NAME}_${API_VERSION}"/>
+    <echo message="➡️ Processing API file: ${apiFile} -> ${API_NAME}_${API_VERSION}"/>
 
-        <!-- 1) Validate using file (apic validate accepts file) -->
-        <exec executable="apic" failonerror="true">
-            <arg value="validate"/>
-            <arg value="${apiFile}"/>
-        </exec>
+    <!-- 1) Validate -->
+    <exec executable="apic" failonerror="true">
+        <arg value="validate"/>
+        <arg value="${apiFile}"/>
+    </exec>
 
-        <!-- 2) Check existence: draft-apis:get expects NAME:VERSION -->
-        <exec executable="apic" resultproperty="api.check.rc" failonerror="false">
-            <arg value="draft-apis:get"/>
-            <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
+    <!-- 2) Check existence -->
+    <exec executable="apic" resultproperty="api.check.rc" failonerror="false">
+        <arg value="draft-apis:get"/>
+        <arg value="${API_NAME}:${API_VERSION}"/>
+        <arg value="--server=${SERVER}"/>
+        <arg value="--org=${ORG}"/>
+    </exec>
 
-        <!-- 3) Branch: if rc==0 -> update, else create -->
-        <condition property="api.exists">
-            <equals arg1="${api.check.rc}" arg2="0"/>
-        </condition>
+    <!-- 3) Call proper target based on existence -->
+    <condition property="api.exists">
+        <equals arg1="${api.check.rc}" arg2="0"/>
+    </condition>
 
-        <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
+    <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
 
-        <antcall target="api-update" if="api.exists"/>
-        <antcall target="api-create" unless="api.exists"/>
+    <antcall target="api-exists-handler"/>
+</target>
+
+<target name="api-exists-handler" if="api.exists">
+    <antcall target="api-update"/>
+</target>
+
+<target name="api-exists-handler" unless="api.exists">
+    <antcall target="api-create"/>
+</target>
 
         <!-- 4) Optional: run product-ref update helper that prepares product yamls to reference APIs -->
         <!--    Runs after each API; adjust script path as needed. failonerror=false so single script failure won't abort all -->
