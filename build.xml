@@ -1,4 +1,4 @@
-<project name="apic-cicd-pipeline" default="publish" basedir=".">
+<project name="apic-cicd-pipeline" default="ci" basedir=".">
 
     <!-- =================== ant-contrib foreach =================== -->
     <taskdef resource="net/sf/antcontrib/antcontrib.properties">
