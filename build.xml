@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="apic-cicd-bulk" default="ci" basedir=".">
 
-    <!-- ============ Configurable properties (can be overridden via -D in Jenkins) ============ -->
+    <!-- ============ Configurable properties ============ -->
     <property name="ANT_CONTRIB_JAR" value="ant-contrib-1.0b3.jar"/>
     <property name="APIS_DIR"        value="apis"/>
     <property name="PRODUCTS_DIR"    value="products"/>
@@ -15,14 +15,14 @@
     <property name="PRODUCT_NAME"    value=""/>
     <property name="PRODUCT_VERSION" value=""/>
 
-    <!-- ================= ant-contrib: foreach, propertyregex, etc. ================= -->
+    <!-- ================= ant-contrib ================= -->
     <taskdef resource="net/sf/antcontrib/antcontrib.properties">
         <classpath>
             <pathelement location="${ANT_CONTRIB_JAR}"/>
         </classpath>
     </taskdef>
 
-    <!-- ================= Login (single time) ================= -->
+    <!-- ================= Login ================= -->
     <target name="login">
         <echo message="🔐 Logging in to API Connect (server=${SERVER}) ..."/>
         <echo message="Using APIC_USERNAME=${APIC_USERNAME}"/>
@@ -46,60 +46,47 @@
     </target>
 
     <target name="process-api">
-    <!-- Extract base name of the YAML file -->
-    <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
+        <!-- Extract base name of the YAML file -->
+        <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
 
-    <!-- Split into API_NAME and API_VERSION -->
-    <propertyregex property="API_NAME"
-                   input="${apiBase}"
-                   regexp="^([^_]+)_(.*)$"
-                   select="\1"/>
-    <propertyregex property="API_VERSION"
-                   input="${apiBase}"
-                   regexp="^([^_]+)_(.*)$"
-                   select="\2"/>
+        <!-- Split into API_NAME and API_VERSION -->
+        <propertyregex property="API_NAME"
+                       input="${apiBase}"
+                       regexp="^([^_]+)_(.*)$"
+                       select="\1"/>
+        <propertyregex property="API_VERSION"
+                       input="${apiBase}"
+                       regexp="^([^_]+)_(.*)$"
+                       select="\2"/>
 
-    <echo>➡️ Processing API file: ${apiFile} -> ${API_NAME}:${API_VERSION}</echo>
+        <echo>➡️ Processing API file: ${apiFile} -> ${API_NAME}:${API_VERSION}</echo>
 
-    <!-- Validate API -->
-    <exec executable="apic" resultproperty="api.validate.rc" failonerror="true">
-        <arg value="validate"/>
-        <arg value="${apiFile}"/>
-    </exec>
+        <!-- Validate API -->
+        <exec executable="apic" resultproperty="api.validate.rc" failonerror="true">
+            <arg value="validate"/>
+            <arg value="${apiFile}"/>
+        </exec>
 
-    <!-- Check if API already exists -->
-    <exec executable="apic" resultproperty="api.check.rc" failonerror="false" outputproperty="api.check.out">
-        <arg value="draft-apis:get"/>
-        <arg value="${API_NAME}:${API_VERSION}"/>
-        <arg value="-s"/>
-        <arg value="${APIC_SERVER}"/>
-        <arg value="-o"/>
-        <arg value="${APIC_ORG}"/>
-    </exec>
+        <!-- Check if API already exists -->
+        <exec executable="apic" resultproperty="api.check.rc" failonerror="false" outputproperty="api.check.out">
+            <arg value="draft-apis:get"/>
+            <arg value="${API_NAME}:${API_VERSION}"/>
+            <arg value="--server=${SERVER}"/>
+            <arg value="--org=${ORG}"/>
+        </exec>
 
-    <!-- Set flag if API exists -->
-    <condition property="api.exists">
-        <equals arg1="${api.check.rc}" arg2="0"/>
-    </condition>
+        <!-- Set flag if API exists -->
+        <condition property="api.exists">
+            <equals arg1="${api.check.rc}" arg2="0"/>
+        </condition>
 
-    <!-- Always call both handlers (Ant will skip based on if/unless) -->
-    <antcall target="api-exists-handler-true" inheritAll="true"/>
-    <antcall target="api-exists-handler-false" inheritAll="true"/>
-</target>
+        <echo>    api.check.rc=${api.check.rc}  api.exists=${api.exists}</echo>
 
-<!-- Update handler (runs only if api.exists=true) -->
-<target name="api-exists-handler-true" if="api.exists">
-    <echo>🔄 API already exists. Updating: ${API_NAME}:${API_VERSION}</echo>
-    <antcall target="api-update"/>
-</target>
+        <!-- Call correct handler -->
+        <antcall target="api-exists-handler-true" inheritAll="true"/>
+        <antcall target="api-exists-handler-false" inheritAll="true"/>
 
-<!-- Create handler (runs only if api.exists is not set) -->
-<target name="api-exists-handler-false" unless="api.exists">
-    <echo>🆕 API does not exist. Creating: ${API_NAME}:${API_VERSION}</echo>
-    <antcall target="api-create"/>
-</target>
-
-        <!-- 4) Optional: run product-ref update helper -->
+        <!-- Optional: run product-ref update helper -->
         <exec executable="sh" failonerror="false">
             <arg value="scripts/fix-product-refs.sh"/>
             <arg value="${basedir}/${PRODUCTS_DIR}"/>
@@ -107,11 +94,14 @@
         </exec>
     </target>
 
-    <target name="api-exists-handler-true">
+    <!-- API handlers -->
+    <target name="api-exists-handler-true" if="api.exists">
+        <echo>🔄 API already exists. Updating: ${API_NAME}:${API_VERSION}</echo>
         <antcall target="api-update"/>
     </target>
 
-    <target name="api-exists-handler-false">
+    <target name="api-exists-handler-false" unless="api.exists">
+        <echo>🆕 API does not exist. Creating: ${API_NAME}:${API_VERSION}</echo>
         <antcall target="api-create"/>
     </target>
 
@@ -153,7 +143,6 @@
                        input="${productBase}"
                        regexp="^([^_]+)_(.*)$"
                        select="\1"/>
-
         <propertyregex property="PRODUCT_VERSION"
                        input="${productBase}"
                        regexp="^([^_]+)_(.*)$"
