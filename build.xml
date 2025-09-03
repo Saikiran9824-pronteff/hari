@@ -67,12 +67,13 @@
             <arg value="--server"/><arg value="${SERVER_URL}"/>
             <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
-        <condition property="api.exists.true">
+         <condition property="api.exists.true">
             <and>
                 <isset property="api.exists"/>
-                <matches string="${api.exists}" pattern=".*${API_NAME}:${API_VERSION}.*"/>
-            </and>
-        </condition>
+                <matches string="${api.exists}" 
+                     pattern=".*\Q${API_NAME}:${API_VERSION}\E.*"/>
+            </and>    
+         </condition>
     </target>
 
     <target name="api-process" depends="api-check">
@@ -143,11 +144,12 @@
             <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
         <condition property="product.exists.true">
-            <and>
-                <isset property="product.exists"/>
-                <matches string="${product.exists}" pattern=".*${PRODUCT_NAME}:${API_VERSION}.*"/>
-            </and>
-        </condition>
+              <and>
+        <isset property="product.exists"/>
+        <matches string="${product.exists}" 
+                 pattern=".*\Q${PRODUCT_NAME}:${API_VERSION}\E.*"/>
+              </and>
+       </condition>
     </target>
 
     <target name="product-process" depends="product-check">
