@@ -1,103 +1,134 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="apic-cicd" default="ci" basedir=".">
+<project name="apic-cicd-pipeline" default="ci" basedir=".">
 
-    <!-- =============================== -->
-    <!--  Hardcoded APIC login details   -->
-    <!-- =============================== -->
+    <!-- ant-contrib (foreach, propertyregex, etc.) -->
+    <taskdef resource="net/sf/antcontrib/antcontrib.properties">
+        <classpath>
+            <pathelement location="ant-contrib-1.0b3.jar"/>
+        </classpath>
+    </taskdef>
+
+    <!-- ======= Properties ======= -->
+    <property name="APIS_DIR" value="apis"/>
+    <property name="PRODUCTS_DIR" value="products"/>
+    <property name="BACKUP_DIR" value="backup"/>
+
+    <property name="SERVER_URL" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
+    <property name="ORG_NAME"    value="indusapi-np"/>
+    <property name="CATALOG_NAME" value="sandbox"/>
+
+    <!-- ======= Login ======= -->
     <target name="login">
         <echo message="🔐 Logging in to API Connect..."/>
         <exec executable="apic" failonerror="true">
             <arg value="login"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--username"/>
-            <arg value="umesh"/>
-            <arg value="--password"/>
-            <arg value="!n0r1t5@C"/>
-            <arg value="--realm"/>
-            <arg value="provider/default-idp-2"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--username"/><arg value="umesh"/>
+            <arg value="--password"/><arg value="!n0r1t5@C"/>
+            <arg value="--realm"/><arg value="provider/default-idp-2"/>
         </exec>
     </target>
 
-    <!-- =============================== -->
-    <!--  Bulk API processing (loop)     -->
-    <!-- =============================== -->
+    <!-- ======= Bulk APIs ======= -->
     <target name="bulk-apis" depends="login">
-        <foreach target="api-flow" param="api.file" delimiter=",">
+        <echo message="✅ Processing all APIs under ${APIS_DIR}/"/>
+        <foreach target="api-flow" param="api.file">
             <path>
-                <fileset dir="apis" includes="*.yaml"/>
+                <!-- Expect filenames like <API_NAME>_<API_VERSION>.yaml -->
+                <fileset dir="${APIS_DIR}" includes="*_*.yaml"/>
             </path>
         </foreach>
     </target>
 
     <target name="api-flow">
-        <!-- Extract name + version from filename (myapi_1.0.0.yaml) -->
+        <!-- Derive API_NAME and API_VERSION from filename -->
         <basename property="api.filename" file="${api.file}" suffix=".yaml"/>
-        <propertyregex property="API_NAME" input="${api.filename}" regexp="(.*)_.*" select="\1"/>
+        <propertyregex property="API_NAME"    input="${api.filename}" regexp="(.*)_.*" select="\1"/>
         <propertyregex property="API_VERSION" input="${api.filename}" regexp=".*_(.*)" select="\1"/>
-        <echo message="➡️ Processing API: ${API_NAME}:${API_VERSION}"/>
+
+        <antcall target="validate-api"/>
+        <antcall target="api-check"/>
         <antcall target="api-process"/>
     </target>
 
-    <!-- =============================== -->
-    <!--  API check/create/update        -->
-    <!-- =============================== -->
-    <target name="validate">
+    <target name="validate-api">
+        <echo message="🔎 Validating ${API_NAME}_${API_VERSION}.yaml"/>
         <exec executable="apic" failonerror="true">
             <arg value="validate"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
-    <target name="api-check" depends="validate">
+    <target name="api-check">
+        <echo message="🔎 Checking if API ${API_NAME}:${API_VERSION} exists..."/>
         <exec executable="apic" failonerror="false" outputproperty="api.exists">
             <arg value="draft-apis:get"/>
             <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
+        <condition property="api.exists.true">
+            <and>
+                <isset property="api.exists"/>
+                <matches string="${api.exists}" pattern=".*${API_NAME}:${API_VERSION}.*"/>
+            </and>
+        </condition>
     </target>
 
     <target name="api-process" depends="api-check">
-        <condition property="api.exists.true">
-            <matches string="${api.exists}" pattern=".*${API_NAME}:${API_VERSION}.*"/>
-        </condition>
         <antcall target="api-update"/>
         <antcall target="api-create"/>
     </target>
 
     <target name="api-create" unless="api.exists.true">
+        <echo message="🆕 Creating draft API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:create"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
     </target>
 
     <target name="api-update" if="api.exists.true">
+        <echo message="♻️ Updating draft API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:update"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
             <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="apis/${API_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
-    <!-- =============================== -->
-    <!--  Bulk Product processing (loop) -->
-    <!-- =============================== -->
-    <target name="bulk-products" depends="bulk-apis">
-        <foreach target="product-flow" param="product.file" delimiter=",">
+    <!-- ======= Fix $ref in Products (points to ../apis/*.yaml) ======= -->
+    <target name="fix-product-refs" depends="bulk-apis">
+        <echo message="🛠 Fixing $ref paths in product YAMLs..."/>
+        <exec executable="bash">
+            <arg value="-c"/>
+            <arg line="
+              find ${PRODUCTS_DIR} -type f -name '*.yaml' | sort | while read -r product; do
+                awk '
+                  {
+                    if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
+                     || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
+                      sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
+                    }
+                    print
+                  }
+                ' \"${product}\" > \"${product}.tmp\" && mv \"${product}.tmp\" \"${product}\"
+              done
+            "/>
+        </exec>
+    </target>
+
+    <!-- ======= Bulk Products (create/update) ======= -->
+    <target name="bulk-products" depends="fix-product-refs">
+        <echo message="📦 Processing all Products under ${PRODUCTS_DIR}/"/>
+        <foreach target="product-flow" param="product.file">
             <path>
-                <fileset dir="products" includes="*.yaml"/>
+                <!-- Expect filenames like <PRODUCT_NAME>_<API_VERSION>.yaml -->
+                <fileset dir="${PRODUCTS_DIR}" includes="*_*.yaml"/>
             </path>
         </foreach>
     </target>
@@ -105,61 +136,100 @@
     <target name="product-flow">
         <basename property="product.filename" file="${product.file}" suffix=".yaml"/>
         <propertyregex property="PRODUCT_NAME" input="${product.filename}" regexp="(.*)_.*" select="\1"/>
-        <propertyregex property="API_VERSION" input="${product.filename}" regexp=".*_(.*)" select="\1"/>
-        <echo message="➡️ Processing Product: ${PRODUCT_NAME}:${API_VERSION}"/>
-        <antcall target="product-process"/>
+        <propertyregex property="PRODUCT_VERSION" input="${product.filename}" regexp=".*_(.*)" select="\1"/>
+
+        <antcall target="product-check">
+            <param name="API_VERSION" value="${PRODUCT_VERSION}"/>
+        </antcall>
+        <antcall target="product-process">
+            <param name="API_VERSION" value="${PRODUCT_VERSION}"/>
+        </antcall>
     </target>
 
-    <!-- =============================== -->
-    <!--  Product check/create/update    -->
-    <!-- =============================== -->
     <target name="product-check">
+        <echo message="🔎 Checking if Product ${PRODUCT_NAME}:${API_VERSION} exists..."/>
         <exec executable="apic" failonerror="false" outputproperty="product.exists">
             <arg value="draft-products:get"/>
             <arg value="${PRODUCT_NAME}:${API_VERSION}"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
+        <condition property="product.exists.true">
+            <and>
+                <isset property="product.exists"/>
+                <matches string="${product.exists}" pattern=".*${PRODUCT_NAME}:${API_VERSION}.*"/>
+            </and>
+        </condition>
     </target>
 
     <target name="product-process" depends="product-check">
-        <condition property="product.exists.true">
-            <matches string="${product.exists}" pattern=".*${PRODUCT_NAME}:${API_VERSION}.*"/>
-        </condition>
         <antcall target="product-update"/>
         <antcall target="product-create"/>
     </target>
 
     <target name="product-create" unless="product.exists.true">
+        <echo message="🆕 Creating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-products:create"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
         </exec>
     </target>
 
     <target name="product-update" if="product.exists.true">
+        <echo message="♻️ Updating draft Product ${PRODUCT_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-products:update"/>
-            <arg value="--server"/>
-            <arg value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-            <arg value="--org"/>
-            <arg value="indusapi-np"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
             <arg value="${PRODUCT_NAME}:${API_VERSION}"/>
-            <arg value="products/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
+            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${API_VERSION}.yaml"/>
         </exec>
     </target>
 
-    <!-- =============================== -->
-    <!--  CI flow entry point            -->
-    <!-- =============================== -->
-    <target name="ci" depends="bulk-products">
-        <echo message="🎉 Bulk CI/CD pipeline completed successfully!"/>
+    <!-- ======= Publish all Products ======= -->
+    <target name="publish" depends="bulk-products">
+        <echo message="🚀 Publishing Products to catalog ${CATALOG_NAME}"/>
+        <foreach target="publish-one" param="publish.file">
+            <path>
+                <fileset dir="${PRODUCTS_DIR}" includes="*_*.yaml"/>
+            </path>
+        </foreach>
+    </target>
+
+    <target name="publish-one">
+        <basename property="publish.basename" file="${publish.file}" suffix=".yaml"/>
+        <echo message="   ➡ Publishing ${publish.basename} to ${CATALOG_NAME}"/>
+        <exec executable="apic" failonerror="true">
+            <arg value="products:publish"/>
+            <arg value="${publish.file}"/>
+            <arg value="--scope"/><arg value="catalog"/>
+            <arg value="--catalog"/><arg value="${CATALOG_NAME}"/>
+            <arg value="--server"/><arg value="${SERVER_URL}"/>
+            <arg value="--org"/><arg value="${ORG_NAME}"/>
+        </exec>
+    </target>
+
+    <!-- ======= Backup & CI wrapper ======= -->
+    <target name="backup" depends="publish">
+        <tstamp><format property="build.ts" pattern="yyyy-MM-dd_HH-mm-ss"/></tstamp>
+        <echo message="💾 Backing up YAMLs to ${BACKUP_DIR}/${build.ts}/"/>
+        <mkdir dir="${BACKUP_DIR}/${build.ts}/apis"/>
+        <mkdir dir="${BACKUP_DIR}/${build.ts}/products"/>
+        <copy todir="${BACKUP_DIR}/${build.ts}/apis"><fileset dir="${APIS_DIR}" includes="*.yaml"/></copy>
+        <copy todir="${BACKUP_DIR}/${build.ts}/products"><fileset dir="${PRODUCTS_DIR}" includes="*.yaml"/></copy>
+
+        <!-- Optional Git backup (comment out if not needed) -->
+        <exec executable="git" failonerror="true"><arg value="add"/><arg value="."/></exec>
+        <exec executable="git" failonerror="true">
+            <arg value="commit"/><arg value="-m"/><arg value="Bulk backup at ${build.ts}"/>
+        </exec>
+        <exec executable="git" failonerror="true"><arg value="push"/><arg value="origin"/><arg value="main"/></exec>
+    </target>
+
+    <target name="ci" depends="backup">
+        <echo message="🎉 CI/CD pipeline completed successfully!"/>
     </target>
 
 </project>
