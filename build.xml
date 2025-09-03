@@ -46,50 +46,58 @@
     </target>
 
     <target name="process-api">
-        <!-- Get filename without extension -->
-        <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
+    <!-- Extract base name of the YAML file -->
+    <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
 
-        <!-- Split name and version -->
-        <pathconvert property="API_NAME">
-            <mapper type="regexp" from="^([^_]+)_(.*)$" to="\1"/>
-            <path>
-                <pathelement location="${apiBase}"/>
-            </path>
-        </pathconvert>
+    <!-- Split into API_NAME and API_VERSION -->
+    <propertyregex property="API_NAME"
+                   input="${apiBase}"
+                   regexp="^([^_]+)_(.*)$"
+                   select="\1"/>
+    <propertyregex property="API_VERSION"
+                   input="${apiBase}"
+                   regexp="^([^_]+)_(.*)$"
+                   select="\2"/>
 
-        <pathconvert property="API_VERSION">
-            <mapper type="regexp" from="^([^_]+)_(.*)$" to="\2"/>
-            <path>
-                <pathelement location="${apiBase}"/>
-            </path>
-        </pathconvert>
+    <echo>➡️ Processing API file: ${apiFile} -> ${API_NAME}:${API_VERSION}</echo>
 
-        <echo message="➡️ Processing API file: ${apiFile} -> ${API_NAME}_${API_VERSION}"/>
+    <!-- Validate API -->
+    <exec executable="apic" resultproperty="api.validate.rc" failonerror="true">
+        <arg value="validate"/>
+        <arg value="${apiFile}"/>
+    </exec>
 
-        <!-- 1) Validate -->
-        <exec executable="apic" failonerror="true">
-            <arg value="validate"/>
-            <arg value="${apiFile}"/>
-        </exec>
+    <!-- Check if API already exists -->
+    <exec executable="apic" resultproperty="api.check.rc" failonerror="false" outputproperty="api.check.out">
+        <arg value="draft-apis:get"/>
+        <arg value="${API_NAME}:${API_VERSION}"/>
+        <arg value="-s"/>
+        <arg value="${APIC_SERVER}"/>
+        <arg value="-o"/>
+        <arg value="${APIC_ORG}"/>
+    </exec>
 
-        <!-- 2) Check existence -->
-        <exec executable="apic" resultproperty="api.check.rc" failonerror="false">
-            <arg value="draft-apis:get"/>
-            <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
+    <!-- Set flag if API exists -->
+    <condition property="api.exists">
+        <equals arg1="${api.check.rc}" arg2="0"/>
+    </condition>
 
-        <!-- 3) Set flag -->
-        <condition property="api.exists">
-            <equals arg1="${api.check.rc}" arg2="0"/>
-        </condition>
+    <!-- Always call both handlers (Ant will skip based on if/unless) -->
+    <antcall target="api-exists-handler-true" inheritAll="true"/>
+    <antcall target="api-exists-handler-false" inheritAll="true"/>
+</target>
 
-        <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
+<!-- Update handler (runs only if api.exists=true) -->
+<target name="api-exists-handler-true" if="api.exists">
+    <echo>🔄 API already exists. Updating: ${API_NAME}:${API_VERSION}</echo>
+    <antcall target="api-update"/>
+</target>
 
-        <!-- Call conditional handler -->
-        <antcall target="api-exists-handler-true" inheritAll="true" if="api.exists"/>
-        <antcall target="api-exists-handler-false" inheritAll="true" unless="api.exists"/>
+<!-- Create handler (runs only if api.exists is not set) -->
+<target name="api-exists-handler-false" unless="api.exists">
+    <echo>🆕 API does not exist. Creating: ${API_NAME}:${API_VERSION}</echo>
+    <antcall target="api-create"/>
+</target>
 
         <!-- 4) Optional: run product-ref update helper -->
         <exec executable="sh" failonerror="false">
