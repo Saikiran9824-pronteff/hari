@@ -46,7 +46,7 @@
 
         <!-- validate API -->
         <exec executable="apic" failonerror="true">
-            <arg value="draft-apis:validate"/>
+            <arg value="validate"/>
             <arg value="@{api.file}"/>
         </exec>
 
