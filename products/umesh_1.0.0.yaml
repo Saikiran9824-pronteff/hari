@@ -12,7 +12,7 @@ plans:
       default:
         value: 100/1hour
     apis:
-      hello-world: {}
+      hello: {}
 apis:
   hello-world:
     $ref: hello_1.0.0.yaml
