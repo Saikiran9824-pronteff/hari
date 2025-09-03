@@ -50,7 +50,7 @@
     <!-- Get filename without extension -->
     <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
 
-    <!-- Split name and version by underscore -->
+    <!-- Split name and version -->
     <pathconvert property="API_NAME">
         <mapper type="regexp" from="^([^_]+)_(.*)$" to="\1"/>
         <path>
@@ -81,21 +81,23 @@
         <arg value="--org=${ORG}"/>
     </exec>
 
-    <!-- 3) Call proper target based on existence -->
+    <!-- 3) Set flag -->
     <condition property="api.exists">
         <equals arg1="${api.check.rc}" arg2="0"/>
     </condition>
 
     <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
 
-    <antcall target="api-exists-handler"/>
+    <!-- Call conditional handler -->
+    <antcall target="api-exists-handler-true" inheritAll="true" if="api.exists"/>
+    <antcall target="api-exists-handler-false" inheritAll="true" unless="api.exists"/>
 </target>
 
-<target name="api-exists-handler" if="api.exists">
+<target name="api-exists-handler-true">
     <antcall target="api-update"/>
 </target>
 
-<target name="api-exists-handler" unless="api.exists">
+<target name="api-exists-handler-false">
     <antcall target="api-create"/>
 </target>
 
