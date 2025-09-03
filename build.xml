@@ -15,9 +15,6 @@
     <property name="PRODUCT_NAME"    value=""/>
     <property name="PRODUCT_VERSION" value=""/>
 
-    <!-- APIC credentials (must be provided by Jenkins or environment) -->
-    <property name="APIC_USERNAME" value="${APIC_USERNAME}"/>
-    <property name="APIC_PASSWORD" value="${APIC_PASSWORD}"/>
 
     <!-- ================= ant-contrib: foreach, propertyregex, etc. ================= -->
     <taskdef resource="net/sf/antcontrib/antcontrib.properties">
@@ -33,8 +30,8 @@
         <exec executable="apic" failonerror="true">
             <arg value="login"/>
             <arg value="--server=${SERVER}"/>
-            <arg value="--username=${APIC_USERNAME}"/>
-            <arg value="--password=${APIC_PASSWORD}"/>
+            <arg value="--username=umesh"/>
+            <arg value="--password=!n0r1t5@C"/>
             <arg value="--realm=provider/default-idp-2"/>
         </exec>
     </target>
