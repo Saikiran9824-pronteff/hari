@@ -11,8 +11,8 @@
     <property name="APIS_DIR" value="apis"/>
     <property name="PRODUCTS_DIR" value="products"/>
     <property name="SERVER" value="small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-    <property name="ORG" value="provider-org-name"/>
-    <property name="CATALOG" value="sandbox"/>
+    <property name="ORG" value="indusapi-np"/>
+    <property name="CATALOG" value="prod"/>
 
     <!-- ============= Login ============= -->
     <target name="login">
@@ -20,8 +20,8 @@
         <exec executable="apic" failonerror="true">
             <arg value="login"/>
             <arg value="--server=${SERVER}"/>
-            <arg value="--username=${APIC_USERNAME}"/>
-            <arg value="--password=${APIC_PASSWORD}"/>
+            <arg value="--username=umesh"/>
+            <arg value="--password=!n0r1t5@C"/>
             <arg value="--realm=provider/default-idp-1"/>
         </exec>
     </target>
