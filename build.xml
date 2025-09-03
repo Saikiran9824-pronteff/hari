@@ -10,22 +10,19 @@
     <!-- =================== Properties =================== -->
     <property name="APIS_DIR" value="apis"/>
     <property name="PRODUCTS_DIR" value="products"/>
-    <property name="SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-    <property name="ORG" value="prod"/>
+    <property name="SERVER" value="small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
+    <property name="ORG" value="indusapi-np"/>
+    <property name="CATALOG" value="prod"/>
 
     <!-- =================== Login =================== -->
     <target name="login">
         <echo message="🔐 Logging in to API Connect..."/>
         <exec executable="apic" failonerror="true">
             <arg value="login"/>
-            <arg value="-s"/>
-            <arg value="${SERVER}"/>
-            <arg value="-u"/>
-            <arg value="umesh"/>
-            <arg value="-p"/>
-            <arg value="!n0r1t5@C"/>
-            <arg value="--realm"/>
-            <arg value="provider/default-idp-2"/>
+            <arg value="-s"/><arg value="${SERVER}"/>
+            <arg value="-u"/><arg value="${APIC_USERNAME}"/>
+            <arg value="-p"/><arg value="${APIC_PASSWORD}"/>
+            <arg value="--realm"/><arg value="provider/default-idp-2"/>
         </exec>
     </target>
 
@@ -40,34 +37,61 @@
     </target>
 
     <target name="process-api">
-        <!-- get base name without extension -->
+        <!-- derive API_NAME and API_VERSION -->
         <basename property="api.basename" file="@{api.file}" suffix=".yaml"/>
-
-        <!-- split on first "_" (API_NAME vs API_VERSION) -->
         <propertyregex property="API_NAME" input="${api.basename}" regexp="^([^_]+)_.*$" select="\1"/>
         <propertyregex property="API_VERSION" input="${api.basename}" regexp="^[^_]+_(.*)$" select="\1"/>
 
         <echo message="➡️ Handling API: ${API_NAME}_${API_VERSION}"/>
 
-        <!-- validate -->
+        <!-- validate API -->
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:validate"/>
             <arg value="@{api.file}"/>
         </exec>
 
-        <!-- create/update draft API -->
-        <exec executable="apic" failonerror="false">
-            <arg value="draft-apis:create"/>
-            <arg value="@{api.file}"/>
-            <arg value="--server"/>
-            <arg value="${SERVER}"/>
-            <arg value="--org"/>
-            <arg value="${ORG}"/>
+        <!-- check if API exists -->
+        <exec executable="apic" failonerror="false" resultproperty="api.check.result">
+            <arg value="draft-apis:get"/>
+            <arg value="${API_NAME}:${API_VERSION}"/>
+            <arg value="--server"/><arg value="${SERVER}"/>
+            <arg value="--org"/><arg value="${ORG}"/>
+        </exec>
+
+        <!-- if exists → update else create -->
+        <if>
+            <equals arg1="${api.check.result}" arg2="0"/>
+            <then>
+                <echo message="🔄 Updating API ${API_NAME}:${API_VERSION}"/>
+                <exec executable="apic" failonerror="true">
+                    <arg value="draft-apis:update"/>
+                    <arg value="@{api.file}"/>
+                    <arg value="--server"/><arg value="${SERVER}"/>
+                    <arg value="--org"/><arg value="${ORG}"/>
+                </exec>
+            </then>
+            <else>
+                <echo message="🆕 Creating API ${API_NAME}:${API_VERSION}"/>
+                <exec executable="apic" failonerror="true">
+                    <arg value="draft-apis:create"/>
+                    <arg value="@{api.file}"/>
+                    <arg value="--server"/><arg value="${SERVER}"/>
+                    <arg value="--org"/><arg value="${ORG}"/>
+                </exec>
+            </else>
+        </if>
+    </target>
+
+    <!-- =================== Fix Product Refs =================== -->
+    <target name="fix-product-refs" depends="bulk-apis">
+        <echo message="🔧 Fixing product references..."/>
+        <exec executable="sh" failonerror="true">
+            <arg value="./scripts/fix-product-refs.sh"/>
         </exec>
     </target>
 
     <!-- =================== Bulk Products =================== -->
-    <target name="bulk-products" depends="bulk-apis">
+    <target name="bulk-products" depends="fix-product-refs">
         <echo message="📦 Processing all Products in ${PRODUCTS_DIR}/ folder..."/>
         <foreach target="process-product" param="product.file">
             <path>
@@ -77,26 +101,58 @@
     </target>
 
     <target name="process-product">
+        <!-- derive PRODUCT_NAME and PRODUCT_VERSION -->
         <basename property="product.basename" file="@{product.file}" suffix=".yaml"/>
         <propertyregex property="PRODUCT_NAME" input="${product.basename}" regexp="^([^_]+)_.*$" select="\1"/>
         <propertyregex property="PRODUCT_VERSION" input="${product.basename}" regexp="^[^_]+_(.*)$" select="\1"/>
 
         <echo message="➡️ Handling Product: ${PRODUCT_NAME}_${PRODUCT_VERSION}"/>
 
-        <!-- create/update draft product -->
-        <exec executable="apic" failonerror="false">
-            <arg value="draft-products:create"/>
+        <!-- check if Product exists -->
+        <exec executable="apic" failonerror="false" resultproperty="product.check.result">
+            <arg value="draft-products:get"/>
+            <arg value="${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
+            <arg value="--server"/><arg value="${SERVER}"/>
+            <arg value="--org"/><arg value="${ORG}"/>
+        </exec>
+
+        <!-- if exists → update else create -->
+        <if>
+            <equals arg1="${product.check.result}" arg2="0"/>
+            <then>
+                <echo message="🔄 Updating Product ${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
+                <exec executable="apic" failonerror="true">
+                    <arg value="draft-products:update"/>
+                    <arg value="@{product.file}"/>
+                    <arg value="--server"/><arg value="${SERVER}"/>
+                    <arg value="--org"/><arg value="${ORG}"/>
+                </exec>
+            </then>
+            <else>
+                <echo message="🆕 Creating Product ${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
+                <exec executable="apic" failonerror="true">
+                    <arg value="draft-products:create"/>
+                    <arg value="@{product.file}"/>
+                    <arg value="--server"/><arg value="${SERVER}"/>
+                    <arg value="--org"/><arg value="${ORG}"/>
+                </exec>
+            </else>
+        </if>
+
+        <!-- publish product to catalog -->
+        <echo message="🚀 Publishing Product ${PRODUCT_NAME}:${PRODUCT_VERSION} to catalog ${CATALOG}"/>
+        <exec executable="apic" failonerror="true">
+            <arg value="products:publish"/>
             <arg value="@{product.file}"/>
-            <arg value="--server"/>
-            <arg value="${SERVER}"/>
-            <arg value="--org"/>
-            <arg value="${ORG}"/>
+            <arg value="--server"/><arg value="${SERVER}"/>
+            <arg value="--org"/><arg value="${ORG}"/>
+            <arg value="--catalog"/><arg value="${CATALOG}"/>
         </exec>
     </target>
 
     <!-- =================== CI Entry Point =================== -->
     <target name="ci" depends="bulk-products">
-        <echo message="🎉 Bulk CI pipeline completed successfully!"/>
+        <echo message="🎉 CI pipeline completed successfully!"/>
     </target>
 
 </project>
