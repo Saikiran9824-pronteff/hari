@@ -102,25 +102,13 @@
     </target>
 
     <!-- ======= Fix $ref in Products (points to ../apis/*.yaml) ======= -->
-    <target name="fix-product-refs" depends="bulk-apis">
-        <echo message="🛠 Fixing $ref paths in product YAMLs..."/>
-        <exec executable="bash">
-            <arg value="-c"/>
-            <arg line="
-              find ${PRODUCTS_DIR} -type f -name '*.yaml' | sort | while read -r product; do
-                awk '
-                  {
-                    if (\$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[^\\.\\/][A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ \
-                     || \$0 ~ /^[[:space:]]*\\$ref:[[:space:]]*[A-Za-z0-9._-]*\\.yaml([[:space:]]*(#.*)?)?$/ ) {
-                      sub(/\\$ref:[[:space:]]*/, \"&../apis/\");
-                    }
-                    print
-                  }
-                ' \"${product}\" > \"${product}.tmp\" && mv \"${product}.tmp\" \"${product}\"
-              done
-            "/>
-        </exec>
-    </target>
+<target name="fix-product-refs" depends="api-process">
+<echo message="🔧 Fixing product references with script..."/>
+<exec executable="/var/lib/jenkins/scripts/fix-product-refs.sh" failonerror="true">
+<arg value="${basedir}/products"/>
+<arg value="${basedir}/apis"/>
+</exec>
+</target>
 
     <!-- ======= Bulk Products (create/update) ======= -->
     <target name="bulk-products" depends="fix-product-refs">
