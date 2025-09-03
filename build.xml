@@ -9,12 +9,11 @@
     <property name="ORG"             value="indusapi-np"/>
     <property name="CATALOG"         value="prod"/>
 
-    <!-- optional properties kept so they exist (bulk uses file-driven names) -->
+    <!-- optional properties -->
     <property name="API_NAME"        value=""/>
     <property name="API_VERSION"     value=""/>
     <property name="PRODUCT_NAME"    value=""/>
     <property name="PRODUCT_VERSION" value=""/>
-
 
     <!-- ================= ant-contrib: foreach, propertyregex, etc. ================= -->
     <taskdef resource="net/sf/antcontrib/antcontrib.properties">
@@ -36,7 +35,7 @@
         </exec>
     </target>
 
-    <!-- ================= Bulk APIs: validate -> check -> create/update -> fix refs per-API ================= -->
+    <!-- ================= Bulk APIs ================= -->
     <target name="bulk-apis" depends="login">
         <echo message="📦 Starting bulk API processing from: ${APIS_DIR}"/>
         <foreach param="apiFile" target="process-api">
@@ -46,63 +45,53 @@
         </foreach>
     </target>
 
-<target name="process-api">
-    <!-- Get filename without extension -->
-    <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
+    <target name="process-api">
+        <!-- Get filename without extension -->
+        <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
 
-    <!-- Split name and version -->
-    <pathconvert property="API_NAME">
-        <mapper type="regexp" from="^([^_]+)_(.*)$" to="\1"/>
-        <path>
-            <pathelement location="${apiBase}"/>
-        </path>
-    </pathconvert>
+        <!-- Split name and version -->
+        <pathconvert property="API_NAME">
+            <mapper type="regexp" from="^([^_]+)_(.*)$" to="\1"/>
+            <path>
+                <pathelement location="${apiBase}"/>
+            </path>
+        </pathconvert>
 
-    <pathconvert property="API_VERSION">
-        <mapper type="regexp" from="^([^_]+)_(.*)$" to="\2"/>
-        <path>
-            <pathelement location="${apiBase}"/>
-        </path>
-    </pathconvert>
+        <pathconvert property="API_VERSION">
+            <mapper type="regexp" from="^([^_]+)_(.*)$" to="\2"/>
+            <path>
+                <pathelement location="${apiBase}"/>
+            </path>
+        </pathconvert>
 
-    <echo message="➡️ Processing API file: ${apiFile} -> ${API_NAME}_${API_VERSION}"/>
+        <echo message="➡️ Processing API file: ${apiFile} -> ${API_NAME}_${API_VERSION}"/>
 
-    <!-- 1) Validate -->
-    <exec executable="apic" failonerror="true">
-        <arg value="validate"/>
-        <arg value="${apiFile}"/>
-    </exec>
+        <!-- 1) Validate -->
+        <exec executable="apic" failonerror="true">
+            <arg value="validate"/>
+            <arg value="${apiFile}"/>
+        </exec>
 
-    <!-- 2) Check existence -->
-    <exec executable="apic" resultproperty="api.check.rc" failonerror="false">
-        <arg value="draft-apis:get"/>
-        <arg value="${API_NAME}:${API_VERSION}"/>
-        <arg value="--server=${SERVER}"/>
-        <arg value="--org=${ORG}"/>
-    </exec>
+        <!-- 2) Check existence -->
+        <exec executable="apic" resultproperty="api.check.rc" failonerror="false">
+            <arg value="draft-apis:get"/>
+            <arg value="${API_NAME}:${API_VERSION}"/>
+            <arg value="--server=${SERVER}"/>
+            <arg value="--org=${ORG}"/>
+        </exec>
 
-    <!-- 3) Set flag -->
-    <condition property="api.exists">
-        <equals arg1="${api.check.rc}" arg2="0"/>
-    </condition>
+        <!-- 3) Set flag -->
+        <condition property="api.exists">
+            <equals arg1="${api.check.rc}" arg2="0"/>
+        </condition>
 
-    <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
+        <echo message="    api.check.rc=${api.check.rc}  api.exists=${api.exists}"/>
 
-    <!-- Call conditional handler -->
-    <antcall target="api-exists-handler-true" inheritAll="true" if="api.exists"/>
-    <antcall target="api-exists-handler-false" inheritAll="true" unless="api.exists"/>
-</target>
+        <!-- Call conditional handler -->
+        <antcall target="api-exists-handler-true" inheritAll="true" if="api.exists"/>
+        <antcall target="api-exists-handler-false" inheritAll="true" unless="api.exists"/>
 
-<target name="api-exists-handler-true">
-    <antcall target="api-update"/>
-</target>
-
-<target name="api-exists-handler-false">
-    <antcall target="api-create"/>
-</target>
-
-        <!-- 4) Optional: run product-ref update helper that prepares product yamls to reference APIs -->
-        <!--    Runs after each API; adjust script path as needed. failonerror=false so single script failure won't abort all -->
+        <!-- 4) Optional: run product-ref update helper -->
         <exec executable="sh" failonerror="false">
             <arg value="scripts/fix-product-refs.sh"/>
             <arg value="${basedir}/${PRODUCTS_DIR}"/>
@@ -110,8 +99,16 @@
         </exec>
     </target>
 
+    <target name="api-exists-handler-true">
+        <antcall target="api-update"/>
+    </target>
+
+    <target name="api-exists-handler-false">
+        <antcall target="api-create"/>
+    </target>
+
     <target name="api-create">
-        <echo message="🆕 Creating draft API ${API_NAME}:${API_VERSION} using file ${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
+        <echo message="🆕 Creating draft API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:create"/>
             <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
@@ -121,7 +118,7 @@
     </target>
 
     <target name="api-update">
-        <echo message="♻️ Updating draft API ${API_NAME}:${API_VERSION} using file ${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
+        <echo message="♻️ Updating draft API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
             <arg value="draft-apis:update"/>
             <arg value="${API_NAME}:${API_VERSION}"/>
@@ -131,7 +128,7 @@
         </exec>
     </target>
 
-    <!-- ================= Bulk Products: check -> create/update -> publish ================= -->
+    <!-- ================= Bulk Products ================= -->
     <target name="bulk-products" depends="bulk-apis">
         <echo message="📦 Starting bulk Product processing from: ${PRODUCTS_DIR}"/>
         <foreach param="productFile" target="process-product">
@@ -173,7 +170,7 @@
         <antcall target="product-update" if="product.exists"/>
         <antcall target="product-create" unless="product.exists"/>
 
-        <!-- publish the product to catalog -->
+        <!-- publish the product -->
         <exec executable="apic" failonerror="true">
             <arg value="products:publish"/>
             <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${PRODUCT_VERSION}.yaml"/>
