@@ -18,8 +18,8 @@
         <exec executable="apic" failonerror="true">
             <arg value="login"/>
             <arg value="--server"/><arg value="${APIC_SERVER}"/>
-            <arg value="--username"/><arg value="${APIC_USERNAME}"/>
-            <arg value="--password"/><arg value="${APIC_PASSWORD}"/>
+            <arg value="--username"/><arg value="umesh"/>
+            <arg value="--password"/><arg value="!n0r1t5@C"/>
             <arg value="--realm"/><arg value="provider/default-idp-2"/>
         </exec>
     </target>
