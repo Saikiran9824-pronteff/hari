@@ -22,7 +22,7 @@
             <arg value="--server=${SERVER}"/>
             <arg value="--username=umesh"/>
             <arg value="--password=!n0r1t5@C"/>
-            <arg value="--realm=provider/default-idp-1"/>
+            <arg value="--realm=provider/default-idp-2"/>
         </exec>
     </target>
 
