@@ -1,10 +1,13 @@
 <project name="apic-cicd" default="bulk-ci" basedir=".">
 
   <!-- ==========================================================
-       Ant-Contrib (foreach, if, etc.)
-       Make sure ant-contrib-1.0b3.jar is in $ANT_HOME/lib
+       Ant-Contrib (foreach, if, etc.) with explicit classpath
   ========================================================== -->
-  <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+  <taskdef resource="net/sf/antcontrib/antcontrib.properties">
+    <classpath>
+      <pathelement location="lib/ant-contrib-1.0b3.jar"/>
+    </classpath>
+  </taskdef>
 
   <!-- ==========================================================
        Properties
@@ -18,7 +21,7 @@
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
 
   <!-- ==========================================================
-       LOGIN (hardcoded credentials - replace with Jenkins creds later)
+       LOGIN (hardcoded credentials)
   ========================================================== -->
   <target name="login">
     <echo message="🔐 Logging in to API Connect..."/>
@@ -36,18 +39,22 @@
   ========================================================== -->
   <target name="api-check">
     <echo message="🔍 Checking if API ${API_NAME}:${API_VERSION} exists..."/>
+    <!-- Add apic commands for check here -->
   </target>
 
   <target name="api-process">
     <echo message="⚙️ Processing API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add processing logic -->
   </target>
 
   <target name="api-create">
     <echo message="📦 Creating API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add apic commands for create -->
   </target>
 
   <target name="api-update">
     <echo message="♻️ Updating API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add apic commands for update -->
   </target>
 
   <!-- ==========================================================
@@ -55,18 +62,22 @@
   ========================================================== -->
   <target name="product-check">
     <echo message="🔍 Checking if Product ${PRODUCT_NAME} exists..."/>
+    <!-- Add apic commands for check -->
   </target>
 
   <target name="product-process">
     <echo message="⚙️ Processing Product ${PRODUCT_NAME}..."/>
+    <!-- Add processing logic -->
   </target>
 
   <target name="product-create">
     <echo message="📦 Creating Product ${PRODUCT_NAME}..."/>
+    <!-- Add apic commands for create -->
   </target>
 
   <target name="product-update">
     <echo message="♻️ Updating Product ${PRODUCT_NAME}..."/>
+    <!-- Add apic commands for update -->
   </target>
 
   <!-- ==========================================================
@@ -88,6 +99,7 @@
   ========================================================== -->
   <target name="backup">
     <echo message="💾 Backing up Product ${PRODUCT_NAME} before deployment..."/>
+    <!-- Add backup logic -->
   </target>
 
   <!-- ==========================================================
