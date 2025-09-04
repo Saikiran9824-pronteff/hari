@@ -1,116 +1,5 @@
-<project name="apic-cicd" default="bulk-ci" basedir=".">
-
   <!-- ==========================================================
-       Ant-Contrib (foreach, if, for, etc.) with explicit classpath
-  ========================================================== -->
-  <taskdef resource="net/sf/antcontrib/antcontrib.properties">
-    <classpath>
-      <pathelement location="/usr/share/ant/lib/ant-contrib-1.0b3.jar"/>
-    </classpath>
-  </taskdef>
-
-  <!-- ==========================================================
-       Properties
-  ========================================================== -->
-  <!-- CSV path can be overridden with -Dcsv.file=... -->
-  <property name="csv.file" value="deploy_list.csv"/>
-
-  <!-- APIC Server / Org / Realm -->
-  <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-  <property name="APIC_ORG"    value="indusapi-np"/>
-  <property name="APIC_REALM"  value="provider/default-idp-2"/>
-
-  <!-- ==========================================================
-       LOGIN (hardcoded credentials)
-  ========================================================== -->
-  <target name="login">
-    <echo message="🔐 Logging in to API Connect..."/>
-    <exec executable="apic" failonerror="true">
-      <arg value="login"/>
-      <arg value="--server"/><arg value="${APIC_SERVER}"/>
-      <arg value="--username"/><arg value="umesh"/>
-      <arg value="--password"/><arg value="!n0r1t5@C"/>
-      <arg value="--realm"/><arg value="${APIC_REALM}"/>
-    </exec>
-  </target>
-
-  <!-- ==========================================================
-       API Targets
-  ========================================================== -->
-  <target name="api-check">
-    <echo message="🔍 Checking if API ${API_NAME}:${API_VERSION} exists..."/>
-    <!-- Add apic commands for check here -->
-  </target>
-
-  <target name="api-process">
-    <echo message="⚙️ Processing API ${API_NAME}:${API_VERSION}..."/>
-    <!-- Add processing logic -->
-  </target>
-
-  <target name="api-create">
-    <echo message="📦 Creating API ${API_NAME}:${API_VERSION}..."/>
-    <!-- Add apic commands for create -->
-  </target>
-
-  <target name="api-update">
-    <echo message="♻️ Updating API ${API_NAME}:${API_VERSION}..."/>
-    <!-- Add apic commands for update -->
-  </target>
-
-  <!-- ==========================================================
-       Product Targets
-  ========================================================== -->
-  <target name="product-check">
-    <echo message="🔍 Checking if Product ${PRODUCT_NAME} exists..."/>
-    <!-- Add apic commands for check -->
-  </target>
-
-  <target name="product-process">
-    <echo message="⚙️ Processing Product ${PRODUCT_NAME}..."/>
-    <!-- Add processing logic -->
-  </target>
-
-  <target name="product-create">
-    <echo message="📦 Creating Product ${PRODUCT_NAME}..."/>
-    <!-- Add apic commands for create -->
-  </target>
-
-  <target name="product-update">
-    <echo message="♻️ Updating Product ${PRODUCT_NAME}..."/>
-    <!-- Add apic commands for update -->
-  </target>
-
-  <!-- ==========================================================
-       Publish to Catalog
-  ========================================================== -->
-  <target name="publish">
-    <echo message="🚀 Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}..."/>
-    <exec executable="apic" failonerror="true">
-      <arg value="publish"/>
-      <arg value="--server"/><arg value="${APIC_SERVER}"/>
-      <arg value="--org"/><arg value="${APIC_ORG}"/>
-      <arg value="--catalog"/><arg value="${CATALOG_NAME}"/>
-      <arg value="products/${PRODUCT_NAME}/${PRODUCT_NAME}.yaml"/>
-    </exec>
-  </target>
-
-  <!-- ==========================================================
-       Backup
-  ========================================================== -->
-  <target name="backup">
-    <echo message="💾 Backing up Product ${PRODUCT_NAME} before deployment..."/>
-    <!-- Add backup logic -->
-  </target>
-
-  <!-- ==========================================================
-       CI Single Run
-  ========================================================== -->
-  <target name="ci" depends="api-process,product-process,publish">
-    <echo message="🎉 CI/CD pipeline completed successfully for API=${API_NAME}, Product=${PRODUCT_NAME}"/>
-  </target>
-
-  <!-- ==========================================================
-       BULK Deployment Wrapper (using <for>)
+       BULK Deployment Wrapper (using foreach + do)
   ========================================================== -->
   <target name="bulk-ci" depends="login">
     <echo message="🚀 Bulk deploy to catalog=${CATALOG_NAME} using ${csv.file}"/>
@@ -119,8 +8,8 @@
     <loadfile property="csv.content" srcFile="${csv.file}"/>
 
     <!-- Iterate line by line -->
-    <for list="${csv.content}" param="line" delimiter="${line.separator}">
-      <sequential>
+    <foreach list="${csv.content}" delimiter="${line.separator}" param="line">
+      <do>
         <!-- Skip empty lines -->
         <condition property="skip.line">
           <or>
@@ -160,14 +49,11 @@
                   <param name="API_NAME" value="${API_NAME}"/>
                   <param name="API_VERSION" value="${API_VERSION}"/>
                   <param name="PRODUCT_NAME" value="${PRODUCT_NAME}"/>
-                  <!-- CATALOG_NAME comes from Jenkins UI parameter -->
                 </antcall>
               </else>
             </if>
           </else>
         </if>
-      </sequential>
-    </for>
+      </do>
+    </foreach>
   </target>
-
-</project>
