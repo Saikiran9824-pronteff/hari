@@ -1,11 +1,11 @@
 <project name="apic-cicd" default="bulk-ci" basedir=".">
 
   <!-- ==========================================================
-       Ant-Contrib (foreach, if, etc.) with explicit classpath
+       Ant-Contrib (foreach, if, for, etc.) with explicit classpath
   ========================================================== -->
   <taskdef resource="net/sf/antcontrib/antcontrib.properties">
     <classpath>
-      <pathelement location="lib/ant-contrib-1.0b3.jar"/>
+      <pathelement location="/usr/share/ant/lib/ant-contrib-1.0b3.jar"/>
     </classpath>
   </taskdef>
 
@@ -110,7 +110,7 @@
   </target>
 
   <!-- ==========================================================
-       BULK Deployment Wrapper
+       BULK Deployment Wrapper (using <for>)
   ========================================================== -->
   <target name="bulk-ci" depends="login">
     <echo message="🚀 Bulk deploy to catalog=${CATALOG_NAME} using ${csv.file}"/>
@@ -119,7 +119,7 @@
     <loadfile property="csv.content" srcFile="${csv.file}"/>
 
     <!-- Iterate line by line -->
-    <foreach list="${csv.content}" delimiter="${line.separator}" param="line">
+    <for list="${csv.content}" param="line" delimiter="${line.separator}">
       <sequential>
         <!-- Skip empty lines -->
         <condition property="skip.line">
@@ -167,7 +167,7 @@
           </else>
         </if>
       </sequential>
-    </foreach>
+    </for>
   </target>
 
 </project>
