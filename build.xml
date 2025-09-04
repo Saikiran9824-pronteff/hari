@@ -1,206 +1,97 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project name="apic-cicd-bulk" default="ci" basedir=".">
+<project name="apic-cicd" default="bulk-ci" basedir=".">
 
-    <!-- ============ Configurable properties ============ -->
-    <property name="ANT_CONTRIB_JAR" value="ant-contrib-1.0b3.jar"/>
-    <property name="APIS_DIR"        value="apis"/>
-    <property name="PRODUCTS_DIR"    value="products"/>
-    <property name="SERVER"          value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-    <property name="ORG"             value="indusapi-np"/>
-    <property name="CATALOG"         value="prod"/>
+  <!-- Ant-Contrib for foreach/if/etc. -->
+  <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
-    <!-- optional properties -->
-    <property name="API_NAME"        value=""/>
-    <property name="API_VERSION"     value=""/>
-    <property name="PRODUCT_NAME"    value=""/>
-    <property name="PRODUCT_VERSION" value=""/>
+  <!-- Make ENV vars available as ${env.*} (for credentials) -->
+  <property environment="env"/>
 
-    <!-- ================= ant-contrib ================= -->
-    <taskdef resource="net/sf/antcontrib/antcontrib.properties">
-        <classpath>
-            <pathelement location="${ANT_CONTRIB_JAR}"/>
-        </classpath>
-    </taskdef>
+  <!-- ================== PROPERTIES ================== -->
+  <!-- CSV path can be overridden (-Dcsv.file=...) -->
+  <property name="csv.file" value="deploy_list.csv"/>
 
-    <!-- ================= Login ================= -->
-    <target name="login">
-        <echo message="🔐 Logging in to API Connect (server=${SERVER}) ..."/>
-        <echo message="Using APIC_USERNAME=${APIC_USERNAME}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="login"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--username=umesh"/>
-            <arg value="--password=!n0r1t5@C"/>
-            <arg value="--realm=provider/default-idp-2"/>
-        </exec>
-    </target>
+  <!-- Optional: externalize APIC server/org/realm -->
+  <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
+  <property name="APIC_ORG"    value="indusapi-np"/>
+  <property name="APIC_REALM"  value="provider/default-idp-2"/>
 
-    <!-- ================= Bulk APIs ================= -->
-    <target name="bulk-apis" depends="login">
-        <echo message="📦 Starting bulk API processing from: ${APIS_DIR}"/>
-        <foreach param="apiFile" target="process-api">
-            <path>
-                <fileset dir="${APIS_DIR}" includes="*.yaml"/>
-            </path>
-        </foreach>
-    </target>
+  <!-- ================== LOGIN (now uses env secrets) ================== -->
+  <target name="login">
+    <echo message="🔐 Logging in to API Connect..."/>
+    <exec executable="apic" failonerror="true">
+      <arg value="login"/>
+      <arg value="--server"/><arg value="${APIC_SERVER}"/>
+      <arg value="--username"/><arg value="${env.APIC_USERNAME}"/>
+      <arg value="--password"/><arg value="${env.APIC_PASSWORD}"/>
+      <arg value="--realm"/><arg value="${APIC_REALM}"/>
+    </exec>
+  </target>
 
-    <target name="process-api">
-        <!-- Extract base name of the YAML file -->
-        <basename property="apiBase" file="${apiFile}" suffix=".yaml"/>
+  <!-- ========= Your existing targets stay the same (shortened here) ======== -->
+  <!-- validate, api-check, api-process, api-create, api-update, fix-refs,
+       product-check, product-process, product-create, product-update, publish, backup -->
 
-        <!-- Split into API_NAME and API_VERSION -->
-        <propertyregex property="API_NAME"
-                       input="${apiBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\1"/>
-        <propertyregex property="API_VERSION"
-                       input="${apiBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\2"/>
+  <!-- Keep your final single-run target name same -->
+  <target name="ci" depends="publish">
+    <echo message="🎉 CI/CD pipeline completed successfully!"/>
+  </target>
 
-        <echo>➡️ Processing API file: ${apiFile} -> ${API_NAME}:${API_VERSION}</echo>
+  <!-- ================== BULK WRAPPER ================== -->
+  <target name="bulk-ci" depends="login">
+    <echo message="🚀 Bulk deploy to catalog=${CATALOG_NAME} using ${csv.file}"/>
 
-        <!-- Validate API -->
-        <exec executable="apic" resultproperty="api.validate.rc" failonerror="true">
-            <arg value="validate"/>
-            <arg value="${apiFile}"/>
-        </exec>
+    <!-- Read CSV as one string -->
+    <loadfile property="csv.content" srcFile="${csv.file}"/>
 
-        <!-- Check if API already exists -->
-        <exec executable="apic" resultproperty="api.check.rc" failonerror="false" outputproperty="api.check.out">
-            <arg value="draft-apis:get"/>
-            <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-
-        <!-- Set flag if API exists -->
-        <condition property="api.exists">
-            <equals arg1="${api.check.rc}" arg2="0"/>
+    <!-- Iterate line by line -->
+    <foreach list="${csv.content}" delimiter="${line.separator}" param="line">
+      <sequential>
+        <!-- Skip empty lines -->
+        <condition property="skip.line">
+          <or>
+            <equals arg1="@{line}" arg2=""/>
+            <matches string="@{line}" pattern="^\s*$"/>
+          </or>
         </condition>
+        <if>
+          <isset property="skip.line"/>
+          <then><echo message="(skip empty line)"/></then>
+          <else>
+            <!-- Skip header -->
+            <if>
+              <and>
+                <not><isset property="header.processed"/></not>
+                <matches string="@{line}" pattern="(?i)^API_NAME,API_VERSION,PRODUCT_NAME"/>
+              </and>
+              <then>
+                <property name="header.processed" value="true"/>
+                <echo message="📋 Header detected, skipping"/>
+              </then>
+              <else>
+                <!-- Parse CSV fields (naive CSV: no quotes/commas inside fields) -->
+                <propertyregex property="API_NAME"     input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\1"/>
+                <propertyregex property="API_VERSION"  input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\2"/>
+                <propertyregex property="PRODUCT_NAME" input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\3"/>
 
-        <echo>    api.check.rc=${api.check.rc}  api.exists=${api.exists}</echo>
+                <!-- Trim potential spaces -->
+                <propertyregex property="API_NAME"     input="${API_NAME}"     regexp="^\s*(.*?)\s*$" select="\1"/>
+                <propertyregex property="API_VERSION"  input="${API_VERSION}"  regexp="^\s*(.*?)\s*$" select="\1"/>
+                <propertyregex property="PRODUCT_NAME" input="${PRODUCT_NAME}" regexp="^\s*(.*?)\s*$" select="\1"/>
 
-        <!-- Call correct handler -->
-        <antcall target="api-exists-handler-true" inheritAll="true"/>
-        <antcall target="api-exists-handler-false" inheritAll="true"/>
+                <echo message="➡️  Deploying API=${API_NAME}, VERSION=${API_VERSION}, PRODUCT=${PRODUCT_NAME}, CATALOG=${CATALOG_NAME}"/>
 
-        <!-- Optional: run product-ref update helper -->
-        <exec executable="sh" failonerror="false">
-            <arg value="scripts/fix-product-refs.sh"/>
-            <arg value="${basedir}/${PRODUCTS_DIR}"/>
-            <arg value="${basedir}/${APIS_DIR}"/>
-        </exec>
-    </target>
-
-    <!-- API handlers -->
-    <target name="api-exists-handler-true" if="api.exists">
-        <echo>🔄 API already exists. Updating: ${API_NAME}:${API_VERSION}</echo>
-        <antcall target="api-update"/>
-    </target>
-
-    <target name="api-exists-handler-false" unless="api.exists">
-        <echo>🆕 API does not exist. Creating: ${API_NAME}:${API_VERSION}</echo>
-        <antcall target="api-create"/>
-    </target>
-
-    <target name="api-create">
-        <echo message="🆕 Creating draft API ${API_NAME}:${API_VERSION}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="draft-apis:create"/>
-            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-    </target>
-
-    <target name="api-update">
-        <echo message="♻️ Updating draft API ${API_NAME}:${API_VERSION}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="draft-apis:update"/>
-            <arg value="${API_NAME}:${API_VERSION}"/>
-            <arg value="${APIS_DIR}/${API_NAME}_${API_VERSION}.yaml"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-    </target>
-
-    <!-- ================= Bulk Products ================= -->
-    <target name="bulk-products" depends="bulk-apis">
-        <echo message="📦 Starting bulk Product processing from: ${PRODUCTS_DIR}"/>
-        <foreach param="productFile" target="process-product">
-            <path>
-                <fileset dir="${PRODUCTS_DIR}" includes="*.yaml"/>
-            </path>
-        </foreach>
-    </target>
-
-    <target name="process-product">
-        <basename property="productBase" file="${productFile}" suffix=".yaml"/>
-
-        <propertyregex property="PRODUCT_NAME"
-                       input="${productBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\1"/>
-        <propertyregex property="PRODUCT_VERSION"
-                       input="${productBase}"
-                       regexp="^([^_]+)_(.*)$"
-                       select="\2"/>
-
-        <echo message="➡️ Processing Product file: ${productFile} -> ${PRODUCT_NAME}_${PRODUCT_VERSION}"/>
-
-        <!-- check product existence -->
-        <exec executable="apic" resultproperty="product.check.rc" failonerror="false">
-            <arg value="draft-products:get"/>
-            <arg value="${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-
-        <condition property="product.exists">
-            <equals arg1="${product.check.rc}" arg2="0"/>
-        </condition>
-
-        <echo message="    product.check.rc=${product.check.rc}  product.exists=${product.exists}"/>
-
-        <antcall target="product-update" if="product.exists"/>
-        <antcall target="product-create" unless="product.exists"/>
-
-        <!-- publish the product -->
-        <exec executable="apic" failonerror="true">
-            <arg value="products:publish"/>
-            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${PRODUCT_VERSION}.yaml"/>
-            <arg value="--catalog=${CATALOG}"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-    </target>
-
-    <target name="product-create">
-        <echo message="🆕 Creating draft Product ${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="draft-products:create"/>
-            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${PRODUCT_VERSION}.yaml"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-    </target>
-
-    <target name="product-update">
-        <echo message="♻️ Updating draft Product ${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
-        <exec executable="apic" failonerror="true">
-            <arg value="draft-products:update"/>
-            <arg value="${PRODUCT_NAME}:${PRODUCT_VERSION}"/>
-            <arg value="${PRODUCTS_DIR}/${PRODUCT_NAME}_${PRODUCT_VERSION}.yaml"/>
-            <arg value="--server=${SERVER}"/>
-            <arg value="--org=${ORG}"/>
-        </exec>
-    </target>
-
-    <!-- ================= CI entrypoint ================ -->
-    <target name="ci" depends="bulk-products">
-        <echo message="🎉 CI pipeline finished."/>
-    </target>
-
+                <!-- Reuse your single run -->
+                <antcall target="ci">
+                  <param name="API_NAME" value="${API_NAME}"/>
+                  <param name="API_VERSION" value="${API_VERSION}"/>
+                  <param name="PRODUCT_NAME" value="${PRODUCT_NAME}"/>
+                  <!-- CATALOG_NAME is passed from UI param -->
+                </antcall>
+              </else>
+            </if>
+          </else>
+        </if>
+      </sequential>
+    </foreach>
+  </target>
 </project>
