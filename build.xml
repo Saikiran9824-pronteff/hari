@@ -1,42 +1,113 @@
 <project name="apic-cicd" default="bulk-ci" basedir=".">
 
-  <!-- Ant-Contrib for foreach/if/etc. -->
+  <!-- ==========================================================
+       Ant-Contrib (foreach, if, etc.)
+  ========================================================== -->
   <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
-  <!-- Make ENV vars available as ${env.*} (for credentials) -->
-  <property environment="env"/>
-
-  <!-- ================== PROPERTIES ================== -->
-  <!-- CSV path can be overridden (-Dcsv.file=...) -->
+  <!-- ==========================================================
+       Properties
+  ========================================================== -->
+  <!-- CSV path can be overridden with -Dcsv.file=... -->
   <property name="csv.file" value="deploy_list.csv"/>
 
-  <!-- Optional: externalize APIC server/org/realm -->
+  <!-- APIC Server / Org / Realm -->
   <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
   <property name="APIC_ORG"    value="indusapi-np"/>
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
 
-  <!-- ================== LOGIN (now uses env secrets) ================== -->
+  <!-- ==========================================================
+       LOGIN (hardcoded credentials)
+  ========================================================== -->
   <target name="login">
     <echo message="🔐 Logging in to API Connect..."/>
     <exec executable="apic" failonerror="true">
       <arg value="login"/>
       <arg value="--server"/><arg value="${APIC_SERVER}"/>
-      <arg value="--username"/><arg value="${env.APIC_USERNAME}"/>
-      <arg value="--password"/><arg value="${env.APIC_PASSWORD}"/>
+      <arg value="--username"/><arg value="umesh"/>
+      <arg value="--password"/><arg value="!n0r1t5@C"/>
       <arg value="--realm"/><arg value="${APIC_REALM}"/>
     </exec>
   </target>
 
-  <!-- ========= Your existing targets stay the same (shortened here) ======== -->
-  <!-- validate, api-check, api-process, api-create, api-update, fix-refs,
-       product-check, product-process, product-create, product-update, publish, backup -->
-
-  <!-- Keep your final single-run target name same -->
-  <target name="ci" depends="publish">
-    <echo message="🎉 CI/CD pipeline completed successfully!"/>
+  <!-- ==========================================================
+       API Targets
+  ========================================================== -->
+  <target name="api-check">
+    <echo message="🔍 Checking if API ${API_NAME}:${API_VERSION} exists..."/>
+    <!-- Add apic commands for check here -->
   </target>
 
-  <!-- ================== BULK WRAPPER ================== -->
+  <target name="api-process">
+    <echo message="⚙️ Processing API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add processing logic -->
+  </target>
+
+  <target name="api-create">
+    <echo message="📦 Creating API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add apic commands for create -->
+  </target>
+
+  <target name="api-update">
+    <echo message="♻️ Updating API ${API_NAME}:${API_VERSION}..."/>
+    <!-- Add apic commands for update -->
+  </target>
+
+  <!-- ==========================================================
+       Product Targets
+  ========================================================== -->
+  <target name="product-check">
+    <echo message="🔍 Checking if Product ${PRODUCT_NAME} exists..."/>
+    <!-- Add apic commands for check -->
+  </target>
+
+  <target name="product-process">
+    <echo message="⚙️ Processing Product ${PRODUCT_NAME}..."/>
+    <!-- Add processing logic -->
+  </target>
+
+  <target name="product-create">
+    <echo message="📦 Creating Product ${PRODUCT_NAME}..."/>
+    <!-- Add apic commands for create -->
+  </target>
+
+  <target name="product-update">
+    <echo message="♻️ Updating Product ${PRODUCT_NAME}..."/>
+    <!-- Add apic commands for update -->
+  </target>
+
+  <!-- ==========================================================
+       Publish to Catalog
+  ========================================================== -->
+  <target name="publish">
+    <echo message="🚀 Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}..."/>
+    <exec executable="apic" failonerror="true">
+      <arg value="publish"/>
+      <arg value="--server"/><arg value="${APIC_SERVER}"/>
+      <arg value="--org"/><arg value="${APIC_ORG}"/>
+      <arg value="--catalog"/><arg value="${CATALOG_NAME}"/>
+      <arg value="products/${PRODUCT_NAME}/${PRODUCT_NAME}.yaml"/>
+    </exec>
+  </target>
+
+  <!-- ==========================================================
+       Backup
+  ========================================================== -->
+  <target name="backup">
+    <echo message="💾 Backing up Product ${PRODUCT_NAME} before deployment..."/>
+    <!-- Add backup logic -->
+  </target>
+
+  <!-- ==========================================================
+       CI Single Run
+  ========================================================== -->
+  <target name="ci" depends="api-process,product-process,publish">
+    <echo message="🎉 CI/CD pipeline completed successfully for API=${API_NAME}, Product=${PRODUCT_NAME}"/>
+  </target>
+
+  <!-- ==========================================================
+       BULK Deployment Wrapper
+  ========================================================== -->
   <target name="bulk-ci" depends="login">
     <echo message="🚀 Bulk deploy to catalog=${CATALOG_NAME} using ${csv.file}"/>
 
@@ -68,24 +139,24 @@
                 <echo message="📋 Header detected, skipping"/>
               </then>
               <else>
-                <!-- Parse CSV fields (naive CSV: no quotes/commas inside fields) -->
+                <!-- Parse CSV fields -->
                 <propertyregex property="API_NAME"     input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\1"/>
                 <propertyregex property="API_VERSION"  input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\2"/>
                 <propertyregex property="PRODUCT_NAME" input="@{line}" regexp="^\s*([^,]+),([^,]+),([^,]+)\s*$" select="\3"/>
 
-                <!-- Trim potential spaces -->
+                <!-- Trim spaces -->
                 <propertyregex property="API_NAME"     input="${API_NAME}"     regexp="^\s*(.*?)\s*$" select="\1"/>
                 <propertyregex property="API_VERSION"  input="${API_VERSION}"  regexp="^\s*(.*?)\s*$" select="\1"/>
                 <propertyregex property="PRODUCT_NAME" input="${PRODUCT_NAME}" regexp="^\s*(.*?)\s*$" select="\1"/>
 
                 <echo message="➡️  Deploying API=${API_NAME}, VERSION=${API_VERSION}, PRODUCT=${PRODUCT_NAME}, CATALOG=${CATALOG_NAME}"/>
 
-                <!-- Reuse your single run -->
+                <!-- Call single-run -->
                 <antcall target="ci">
                   <param name="API_NAME" value="${API_NAME}"/>
                   <param name="API_VERSION" value="${API_VERSION}"/>
                   <param name="PRODUCT_NAME" value="${PRODUCT_NAME}"/>
-                  <!-- CATALOG_NAME is passed from UI param -->
+                  <!-- CATALOG_NAME comes from Jenkins UI parameter -->
                 </antcall>
               </else>
             </if>
@@ -94,4 +165,5 @@
       </sequential>
     </foreach>
   </target>
+
 </project>
