@@ -1,0 +1,4 @@
+API_NAME,API_VERSION,PRODUCT_NAME
+loan-api,1.0.0,loan-product
+customer-api,1.2.0,customer-product
+payment-api,2.0.0,payment-product
