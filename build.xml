@@ -14,7 +14,7 @@
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
   <property name="APIC_USER"   value="umesh"/>
   <!-- escape special chars if present -->
-  <property name="APIC_PASSWORD" value="!n0r1t5@C"/>
+  <property name="APIC_PASSWORD" value="!n0r1t5&amp;C"/>
 
   <!-- default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
