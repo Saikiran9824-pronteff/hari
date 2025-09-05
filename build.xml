@@ -8,10 +8,15 @@
   <!-- ==========================================================
        Properties
   ========================================================== -->
-  <property name="GIT_REPO" value="https://github.com/hari/repo.git"/>
+  <property name="GIT_REPO" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
   <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
   <property name="APIC_ORG"    value="indusapi-np"/>
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
+  <property name="APIC_USER"   value="umesh"/>
+  <!-- escape special chars if present -->
+  <property name="APIC_PASSWORD" value="!n0r1t5@C"/>
+
+  <!-- default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
 
   <!-- ==========================================================
@@ -22,8 +27,8 @@
     <exec executable="apic" failonerror="true">
       <arg value="login"/>
       <arg value="--server"/><arg value="${APIC_SERVER}"/>
-      <arg value="--username"/><arg value="umesh"/>
-      <arg value="--password"/><arg value="!n0r1t5@C"/>
+      <arg value="--username"/><arg value="${APIC_USER}"/>
+      <arg value="--password"/><arg value="${APIC_PASSWORD}"/>
       <arg value="--realm"/><arg value="${APIC_REALM}"/>
     </exec>
   </target>
@@ -33,7 +38,7 @@
   ========================================================== -->
   <target name="git-clone">
     <echo message="📥 Cloning GitHub repo..."/>
-    <exec executable="rm">
+    <exec executable="rm" failonerror="false">
       <arg value="-rf"/>
       <arg value="repo"/>
     </exec>
