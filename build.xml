@@ -13,8 +13,8 @@
   <property name="APIC_ORG"    value="indusapi-np"/>
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
   <property name="APIC_USER"   value="umesh"/>
-  <!-- escape special chars if present -->
-  <property name="APIC_PASSWORD" value="!n0r1t5&amp;C"/>
+  <!-- ✅ FIXED: wrap password inside CDATA -->
+  <property name="APIC_PASSWORD"><![CDATA[!n0r1t5&C]]></property>
 
   <!-- default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
