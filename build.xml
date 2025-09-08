@@ -1,28 +1,41 @@
 <project name="apic-cicd" default="bulk-ci" basedir=".">
-  <!-- Load Ant-Contrib -->
+  <!-- ==========================================================
+       Load Ant-Contrib
+  ========================================================== -->
   <taskdef resource="net/sf/antcontrib/antcontrib.properties"
            classpath="lib/ant-contrib-1.0b3.jar"/>
   
-  <!-- Properties -->
+  <!-- ==========================================================
+       Properties
+  ========================================================== -->
   <property name="GIT_REPO" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
   <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-  <property name="APIC_ORG" value="indusapi-np"/>
-  <property name="APIC_USER" value="umesh"/>
+  <property name="APIC_ORG"    value="indusapi-np"/>
+  <property name="APIC_REALM"  value="provider/default-idp-2"/>
+  <property name="APIC_USER"   value="umesh"/>
+  
+  <!-- Load from Jenkins environment -->
   <property environment="env"/>
   <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
+  
+  <!-- Default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
   
-  <!-- Login -->
+  <!-- ==========================================================
+       LOGIN
+  ========================================================== -->
   <target name="login">
-    <echo message="🔑 Logging in to API Connect..."/>
+    <echo message=":closed_lock_with_key: Logging in to API Connect..."/>
     <exec executable="apic" failonerror="true">
-      <arg line="login --server ${APIC_SERVER} --username ${APIC_USER} --password ${APIC_PASSWORD}"/>
+      <arg line="login --server ${APIC_SERVER} --username ${APIC_USER} --password ${APIC_PASSWORD} --realm ${APIC_REALM}"/>
     </exec>
   </target>
   
-  <!-- Git clone -->
+  <!-- ==========================================================
+       GIT CLONE
+  ========================================================== -->
   <target name="git-clone">
-    <echo message="📥 Cloning GitHub repo..."/>
+    <echo message=":inbox_tray: Cloning GitHub repo..."/>
     <exec executable="rm" failonerror="false">
       <arg value="-rf"/>
       <arg value="repo"/>
@@ -32,95 +45,97 @@
     </exec>
   </target>
   
-  <!-- Deploy API -->
-  <target name="deploy-api">
-    <echo message="⚙️ Processing API_FILE=${API_FILE}..."/>
+  <!-- ==========================================================
+       API Deploy Logic
+  ========================================================== -->
+<target name="deploy-api">
+    <echo message=":gear: Processing API_FILE=${API_FILE}..."/>
+
+    <!-- Extract API_NAME and API_VERSION from filename -->
     <basename property="API_BASENAME" file="${API_FILE}" suffix=".yaml"/>
     <propertyregex property="API_NAME" input="${API_BASENAME}" regexp="(.+)_([0-9.]+)" select="\1"/>
     <propertyregex property="API_VERSION" input="${API_BASENAME}" regexp="(.+)_([0-9.]+)" select="\2"/>
+
     <echo message="Parsed API_NAME=${API_NAME}, API_VERSION=${API_VERSION}"/>
-    
-    <!-- Check if draft API exists -->
-    <exec executable="apic" outputproperty="api.exists.true" failonerror="false">
-      <arg line="draft-apis:get --server ${APIC_SERVER} --org ${APIC_ORG} ${API_NAME}:${API_VERSION}"/>
-    </exec>
-    
-    <antcall target="api-update">
-      <param name="API_EXISTS" value="${api.exists.true}"/>
-    </antcall>
-  </target>
-  
-  <target name="api-create" unless="API_EXISTS">
-    <echo message="🆕 Creating new draft API ${API_NAME}:${API_VERSION}"/>
-    <exec executable="apic" failonerror="true">
-      <arg value="draft-apis:create"/>
-      <arg value="${API_FILE}"/>
-      <arg value="--server"/>
-      <arg value="${APIC_SERVER}"/>
-      <arg value="--org"/>
-      <arg value="${APIC_ORG}"/>
-    </exec>
-  </target>
 
-  <target name="api-update" if="API_EXISTS">
-    <echo message="♻️ Updating existing draft API ${API_NAME}:${API_VERSION}"/>
-    <exec executable="apic" failonerror="true">
-      <arg value="draft-apis:update"/>
-      <arg value="${API_NAME}:${API_VERSION}"/>
-      <arg value="${API_FILE}"/>
-      <arg value="--server"/>
-      <arg value="${APIC_SERVER}"/>
-      <arg value="--org"/>
-      <arg value="${APIC_ORG}"/>
+    <!-- Check if API exists -->
+    <exec executable="apic" outputproperty="api.exists" failonerror="false">
+      <arg line="apis:get --server ${APIC_SERVER} --org ${APIC_ORG} ${API_NAME}:${API_VERSION}"/>
     </exec>
-  </target>
 
-  <!-- Deploy Product -->
+    <if>
+      <isset property="api.exists"/>
+      <then>
+        <echo message=":recycle: Updating API ${API_NAME}:${API_VERSION}"/>
+        <exec executable="apic" failonerror="true">
+          <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
+        </exec>
+      </then>
+      <else>
+        <echo message=":package: Creating API ${API_NAME}:${API_VERSION}"/>
+        <exec executable="apic" failonerror="true">
+          <arg line="apis:create --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
+        </exec>
+      </else>
+    </if>
+</target>
+
+  <!-- ==========================================================
+       Product Deploy Logic
+  ========================================================== -->
   <target name="deploy-product">
-    <echo message="⚙️ Processing PRODUCT_FILE=${PRODUCT_FILE}..."/>
+    <echo message=":gear: Processing PRODUCT_FILE=${PRODUCT_FILE}..."/>
+    
+    <!-- Extract PRODUCT_NAME from filename -->
     <propertyregex property="PRODUCT_NAME" input="${PRODUCT_FILE}" regexp="([^/]+)/([^/]+)\.yaml$" select="\2"/>
     
     <!-- Check if Product exists -->
-    <exec executable="apic" outputproperty="product.exists.true" failonerror="false">
+    <exec executable="apic" outputproperty="product.exists" failonerror="false">
       <arg line="products:get --server ${APIC_SERVER} --org ${APIC_ORG} ${PRODUCT_NAME}"/>
     </exec>
     
     <if>
-      <isset property="product.exists.true"/>
+      <isset property="product.exists"/>
       <then>
-        <echo message="♻️ Updating Product ${PRODUCT_NAME}"/>
+        <echo message=":recycle: Updating Product ${PRODUCT_NAME}"/>
         <exec executable="apic" failonerror="true">
           <arg line="products:update --server ${APIC_SERVER} --org ${APIC_ORG} ${PRODUCT_FILE}"/>
         </exec>
       </then>
       <else>
-        <echo message="🆕 Creating Product ${PRODUCT_NAME}"/>
+        <echo message=":package: Creating Product ${PRODUCT_NAME}"/>
         <exec executable="apic" failonerror="true">
           <arg line="products:create --server ${APIC_SERVER} --org ${APIC_ORG} ${PRODUCT_FILE}"/>
         </exec>
       </else>
     </if>
     
-    <echo message="🚀 Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}"/>
+    <!-- Publish after create/update -->
+    <echo message=":rocket: Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}"/>
     <exec executable="apic" failonerror="true">
       <arg line="publish --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} ${PRODUCT_FILE}"/>
     </exec>
   </target>
   
-  <!-- Bulk CI -->
+  <!-- ==========================================================
+       BULK LOOP (APIs + Products)
+  ========================================================== -->
   <target name="bulk-ci" depends="login,git-clone">
+    
+    <!-- APIs -->
     <foreach target="deploy-api" param="API_FILE">
       <path>
         <fileset dir="repo/apis" includes="**/*.yaml"/>
       </path>
     </foreach>
-
+    
+    <!-- Products -->
     <foreach target="deploy-product" param="PRODUCT_FILE">
       <path>
         <fileset dir="repo/products" includes="**/*.yaml"/>
       </path>
     </foreach>
-
-    <echo message="🎉 Bulk deployment completed for all APIs & Products!"/>
+    
+    <echo message=":tada: Bulk deployment completed for all APIs &amp; Products!"/>
   </target>
 </project>
