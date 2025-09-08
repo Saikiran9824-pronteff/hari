@@ -3,6 +3,7 @@
        Load Ant-Contrib
   ========================================================== -->
   <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+  
   <!-- ==========================================================
        Properties
   ========================================================== -->
@@ -11,11 +12,14 @@
   <property name="APIC_ORG"    value="indusapi-np"/>
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
   <property name="APIC_USER"   value="umesh"/>
+  
   <!-- :white_check_mark: Load from Jenkins environment -->
   <property environment="env"/>
   <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
+  
   <!-- default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
+  
   <!-- ==========================================================
        LOGIN
   ========================================================== -->
@@ -25,6 +29,7 @@
       <arg line="login --server ${APIC_SERVER} --username ${APIC_USER} --password ${APIC_PASSWORD} --realm ${APIC_REALM}"/>
     </exec>
   </target>
+  
   <!-- ==========================================================
        GIT CLONE
   ========================================================== -->
@@ -38,6 +43,7 @@
       <arg line="clone ${GIT_REPO} repo"/>
     </exec>
   </target>
+  
   <!-- ==========================================================
        API Deploy Logic
   ========================================================== -->
@@ -63,6 +69,7 @@
       </else>
     </if>
   </target>
+  
   <!-- ==========================================================
        Product Deploy Logic
   ========================================================== -->
@@ -93,6 +100,7 @@
       <arg line="publish --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} repo/products/${PRODUCT_NAME}/${PRODUCT_NAME}.yaml"/>
     </exec>
   </target>
+  
   <!-- ==========================================================
        BULK LOOP (APIs + Products)
   ========================================================== -->
@@ -103,12 +111,15 @@
         <fileset dir="repo/apis" includes="*"/>
       </path>
     </foreach>
+    
     <!-- Products -->
     <foreach target="deploy-product" param="PRODUCT_NAME">
       <path>
         <fileset dir="repo/products" includes="*"/>
       </path>
     </foreach>
-    <echo message=":tada: Bulk deployment completed for all APIs & Products!"/>
+    
+    <!-- FIXED the invalid '&' -->
+    <echo message=":tada: Bulk deployment completed for all APIs &amp; Products!"/>
   </target>
 </project>
