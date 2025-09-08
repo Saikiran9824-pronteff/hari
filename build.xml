@@ -68,7 +68,7 @@
       <then>
         <echo message=":recycle: Updating API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
-          <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
+           <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
         </exec>
       </then>
       <else>
