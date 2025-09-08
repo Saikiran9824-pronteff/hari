@@ -2,7 +2,8 @@
   <!-- ==========================================================
        Load Ant-Contrib
   ========================================================== -->
-  <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
+  <taskdef resource="net/sf/antcontrib/antcontrib.properties"
+           classpath="lib/ant-contrib-1.0b3.jar"/>
   
   <!-- ==========================================================
        Properties
