@@ -14,9 +14,11 @@
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
   <property name="APIC_USER"   value="umesh"/>
   
+  <!-- Load from Jenkins environment -->
   <property environment="env"/>
   <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
   
+  <!-- Default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
   
   <!-- ==========================================================
@@ -46,46 +48,48 @@
   <!-- ==========================================================
        API Deploy Logic
   ========================================================== -->
-  <target name="deploy-api">
+<target name="deploy-api">
     <echo message=":gear: Processing API_FILE=${API_FILE}..."/>
-    
+
     <!-- Extract API_NAME and API_VERSION from filename -->
     <basename property="API_BASENAME" file="${API_FILE}" suffix=".yaml"/>
     <propertyregex property="API_NAME" input="${API_BASENAME}" regexp="(.+)_([0-9.]+)" select="\1"/>
     <propertyregex property="API_VERSION" input="${API_BASENAME}" regexp="(.+)_([0-9.]+)" select="\2"/>
-    
+
     <echo message="Parsed API_NAME=${API_NAME}, API_VERSION=${API_VERSION}"/>
-    
+
     <!-- Check if API exists -->
     <exec executable="apic" outputproperty="api.exists" failonerror="false">
       <arg line="apis:get --server ${APIC_SERVER} --org ${APIC_ORG} ${API_NAME}:${API_VERSION}"/>
     </exec>
-    
+
     <if>
       <isset property="api.exists"/>
       <then>
         <echo message=":recycle: Updating API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
-          <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
+           <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
         </exec>
       </then>
       <else>
         <echo message=":package: Creating API ${API_NAME}:${API_VERSION}"/>
         <exec executable="apic" failonerror="true">
-          <arg line="apis:create --server ${APIC_SERVER} --org ${APIC_ORG} --scope catalog --catalog ${CATALOG_NAME} ${API_NAME}:${API_VERSION} ${API_FILE}"/>
+          <arg line="apis:create --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${API_NAME}:${API_VERSION} ${API_FILE}"/>
         </exec>
       </else>
     </if>
-  </target>
-  
+</target>
+
   <!-- ==========================================================
        Product Deploy Logic
   ========================================================== -->
   <target name="deploy-product">
     <echo message=":gear: Processing PRODUCT_FILE=${PRODUCT_FILE}..."/>
     
+    <!-- Extract PRODUCT_NAME from filename -->
     <propertyregex property="PRODUCT_NAME" input="${PRODUCT_FILE}" regexp="([^/]+)/([^/]+)\.yaml$" select="\2"/>
     
+    <!-- Check if Product exists -->
     <exec executable="apic" outputproperty="product.exists" failonerror="false">
       <arg line="products:get --server ${APIC_SERVER} --org ${APIC_ORG} ${PRODUCT_NAME}"/>
     </exec>
@@ -106,6 +110,7 @@
       </else>
     </if>
     
+    <!-- Publish after create/update -->
     <echo message=":rocket: Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}"/>
     <exec executable="apic" failonerror="true">
       <arg line="publish --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} ${PRODUCT_FILE}"/>
@@ -116,6 +121,7 @@
        BULK LOOP (APIs + Products)
   ========================================================== -->
   <target name="bulk-ci" depends="login,git-clone">
+    
     <!-- APIs -->
     <foreach target="deploy-api" param="API_FILE">
       <path>
@@ -130,6 +136,6 @@
       </path>
     </foreach>
     
-    <echo message=":tada: Bulk deployment completed for all APIs & Products!"/>
+    <echo message=":tada: Bulk deployment completed for all APIs &amp; Products!"/>
   </target>
 </project>
