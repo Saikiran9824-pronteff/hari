@@ -14,11 +14,11 @@
   <property name="APIC_REALM"  value="provider/default-idp-2"/>
   <property name="APIC_USER"   value="umesh"/>
   
-  <!-- :white_check_mark: Load from Jenkins environment -->
+  <!-- Load from Jenkins environment -->
   <property environment="env"/>
   <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
   
-  <!-- default catalog -->
+  <!-- Default catalog -->
   <property name="CATALOG_NAME" value="sandbox"/>
   
   <!-- ==========================================================
@@ -50,10 +50,16 @@
   ========================================================== -->
   <target name="deploy-api">
     <echo message=":gear: Processing API=${API_NAME}..."/>
+    
+    <!-- Extract API_VERSION from api.yaml -->
+    <loadfile property="api.yaml.content" srcFile="repo/apis/${API_NAME}/api.yaml"/>
+    <replaceregexp property="API_VERSION" input="${api.yaml.content}" match="version:\s*([^\s]+)" replace="\1"/>
+    
     <!-- Check if API exists -->
     <exec executable="apic" outputproperty="api.exists" failonerror="false">
       <arg line="apis:get --server ${APIC_SERVER} --org ${APIC_ORG} ${API_NAME}:${API_VERSION}"/>
     </exec>
+    
     <if>
       <isset property="api.exists"/>
       <then>
@@ -76,10 +82,12 @@
   ========================================================== -->
   <target name="deploy-product">
     <echo message=":gear: Processing Product=${PRODUCT_NAME}..."/>
+    
     <!-- Check if Product exists -->
     <exec executable="apic" outputproperty="product.exists" failonerror="false">
       <arg line="products:get --server ${APIC_SERVER} --org ${APIC_ORG} ${PRODUCT_NAME}"/>
     </exec>
+    
     <if>
       <isset property="product.exists"/>
       <then>
@@ -95,6 +103,7 @@
         </exec>
       </else>
     </if>
+    
     <!-- Publish after create/update -->
     <echo message=":rocket: Publishing Product ${PRODUCT_NAME} to catalog ${CATALOG_NAME}"/>
     <exec executable="apic" failonerror="true">
@@ -106,21 +115,21 @@
        BULK LOOP (APIs + Products)
   ========================================================== -->
   <target name="bulk-ci" depends="login,git-clone">
+    
     <!-- APIs -->
     <foreach target="deploy-api" param="API_NAME">
       <path>
-        <fileset dir="repo/apis" includes="*"/>
+        <dirset dir="repo/apis"/>
       </path>
     </foreach>
     
     <!-- Products -->
     <foreach target="deploy-product" param="PRODUCT_NAME">
       <path>
-        <fileset dir="repo/products" includes="*"/>
+        <dirset dir="repo/products"/>
       </path>
     </foreach>
     
-    <!-- FIXED the invalid '&' -->
     <echo message=":tada: Bulk deployment completed for all APIs &amp; Products!"/>
   </target>
 </project>
