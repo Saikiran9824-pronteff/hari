@@ -51,10 +51,10 @@
   <target name="deploy-apis" depends="git-clone">
     <echo message=":rocket: Deploying APIs to API Manager..."/>
 
-    <!-- Loop through all API YAML files under repo/api/* -->
+    <!-- Loop through all API YAML files under repo/apis/*/* -->
     <foreach target="deploy-single-api" param="apiFile">
       <path>
-        <fileset dir="repo/api" includes="**/*.yaml"/>
+        <fileset dir="repo/apis" includes="**/*.yaml"/>
       </path>
     </foreach>
   </target>
