@@ -48,53 +48,41 @@
   <!-- ==========================================================
        DEPLOY APIs
   ========================================================== -->
-  <target name="deploy-apis" depends="git-clone">
-    <echo message=":rocket: Deploying APIs to API Manager..."/>
-
-    <!-- Loop through all API YAML files under repo/apis/*/* -->
-    <foreach target="deploy-single-api" param="apiFile">
-      <path>
-        <fileset dir="repo/apis" includes="**/*.yaml"/>
-      </path>
-    </foreach>
-  </target>
-
-  <!-- ==========================================================
+   <!-- ==========================================================
        DEPLOY SINGLE API
   ========================================================== -->
   <target name="deploy-single-api">
     <echo message="Processing API: @{apiFile}"/>
 
-    <!-- Extract API name from filename (without extension) -->
-    <basename property="apiName" file="@{apiFile}" suffix=".yaml"/>
+    <!-- Extract base filename (hello_1.0.0.yaml → hello_1.0.0) -->
+    <basename property="apiBaseName" file="@{apiFile}" suffix=".yaml"/>
 
-    <!-- Check if API exists -->
-    <exec executable="sh" outputproperty="apiExists" failonerror="false">
-      <arg value="-c"/>
-      <arg value="apic apis:list --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} | grep -w ${apiName}"/>
+    <!-- Split into name and version -->
+    <propertyregex property="apiName" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\1"/>
+    <propertyregex property="apiVersion" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\2"/>
+
+    <echo message="Detected API Name: ${apiName}, Version: ${apiVersion}"/>
+
+    <!-- Try update -->
+    <exec executable="apic" failonerror="false" resultproperty="updateResult">
+      <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion} @{apiFile}"/>
     </exec>
 
-    <condition property="exists">
-      <isset property="apiExists"/>
-    </condition>
-
-    <!-- If exists → update -->
+    <!-- If update failed → create -->
     <if>
-      <isset property="apiExists"/>
+      <equals arg1="${updateResult}" arg2="0"/>
       <then>
-        <echo message=":arrows_counterclockwise: Updating API ${apiName}"/>
-        <exec executable="apic" failonerror="true">
-          <arg line="apis:update @{apiFile} --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME}"/>
-        </exec>
+        <echo message=":arrows_counterclockwise: Updated API ${apiName}:${apiVersion}"/>
       </then>
       <else>
-        <echo message=":sparkles: Creating API ${apiName}"/>
+        <echo message=":sparkles: Creating API ${apiName}:${apiVersion}"/>
         <exec executable="apic" failonerror="true">
           <arg line="apis:create @{apiFile} --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME}"/>
         </exec>
       </else>
     </if>
   </target>
+
 
   <!-- ==========================================================
        BULK CI ENTRY POINT
