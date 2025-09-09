@@ -52,44 +52,35 @@
   <target name="deploy-single-api">
     <echo message="Processing API: @{apiFile}"/>
 
-    <!-- Extract base filename (hello_1.0.0.yaml → hello_1.0.0) -->
     <basename property="apiBaseName" file="@{apiFile}" suffix=".yaml"/>
-
-    <!-- Split into name and version -->
     <propertyregex property="apiName" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\1"/>
     <propertyregex property="apiVersion" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\2"/>
-
     <echo message="Detected API Name: ${apiName}, Version: ${apiVersion}"/>
 
-    <!-- Try update -->
+    <!-- Update API -->
     <exec executable="apic" failonerror="false" resultproperty="updateResult">
-      <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion} @{apiFile}"/>
+        <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion} @{apiFile}"/>
     </exec>
 
-    <!-- If update failed → create -->
+    <!-- If update failed → create + publish -->
     <if>
-      <equals arg1="${updateResult}" arg2="0"/>
-      <then>
-        <echo message=":arrows_counterclockwise: Updated API ${apiName}:${apiVersion}"/>
-      </then>
-      <else>
-        <echo message=":sparkles: Creating API ${apiName}:${apiVersion}"/>
-        <exec executable="apic" failonerror="true">
-          <arg line="apis:create --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} @{apiFile}"/>
-        </exec>
-      </else>
+        <not>
+            <equals arg1="${updateResult}" arg2="0"/>
+        </not>
+        <then>
+            <echo message=":sparkles: Creating API ${apiName}:${apiVersion}"/>
+            <exec executable="apic" failonerror="true">
+                <arg line="draft-apis:create @{apiFile} --server ${APIC_SERVER} --org ${APIC_ORG}"/>
+            </exec>
+            <exec executable="apic" failonerror="true">
+                <arg line="publish @{apiFile} --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME}"/>
+            </exec>
+        </then>
+        <else>
+            <echo message=":arrows_counterclockwise: Updated API ${apiName}:${apiVersion}"/>
+        </else>
     </if>
-  </target>
-
-  <!-- ==========================================================
-       DEPLOY APIs (loop all)
-  ========================================================== -->
-  <target name="deploy-apis" depends="git-clone,login">
-    <echo message=":rocket: Deploying APIs to API Manager..."/>
-    <foreach target="deploy-single-api" param="apiFile">
-      <fileset dir="repo/apis" includes="**/*.yaml"/>
-    </foreach>
-  </target>
+</target>
 
   <!-- ==========================================================
        BULK CI ENTRY POINT
