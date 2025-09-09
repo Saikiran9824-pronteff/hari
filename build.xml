@@ -1,103 +1,86 @@
-<project name="apic-cicd" default="bulk-ci" basedir=".">
-  <!-- ==========================================================
-       Load Ant-Contrib
-  ========================================================== -->
-  <taskdef resource="net/sf/antcontrib/antcontrib.properties"
-           classpath="lib/ant-contrib-1.0b3.jar"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="apic-cicd" default="deploy-apis">
 
-  <!-- ==========================================================
-       Properties
-  ========================================================== -->
-  <property name="GIT_REPO" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
-  <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
-  <property name="APIC_ORG"    value="indusapi-np"/>
-  <property name="APIC_REALM"  value="provider/default-idp-2"/>
-  <property name="APIC_USER"   value="umesh"/>
+  <!-- ================== PROPERTIES ================== -->
+  <property name="git.repo.url" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
+  <property name="git.repo.dir" value="repo"/>
 
-  <!-- Load from Jenkins environment -->
-  <property environment="env"/>
-  <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
+  <!-- API Connect config -->
+  <property name="mgmtServer" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
+  <property name="orgName" value="induapi-np"/>
+  <property name="catalogName" value="prod"/>
 
-  <!-- Default catalog -->
-  <property name="CATALOG_NAME" value="prod"/>
-
-  <!-- ==========================================================
-       LOGIN
-  ========================================================== -->
-  <target name="login">
-    <echo message=":closed_lock_with_key: Logging in to API Connect..."/>
-    <exec executable="apic" failonerror="true">
-      <arg line="login --server ${APIC_SERVER} --username ${APIC_USER} --password ${APIC_PASSWORD} --realm ${APIC_REALM}"/>
-    </exec>
-  </target>
-
-  <!-- ==========================================================
-       GIT CLONE
-  ========================================================== -->
+  <!-- ================== GIT CLONE ================== -->
   <target name="git-clone">
     <echo message=":inbox_tray: Cloning GitHub repo..."/>
-    <exec executable="rm" failonerror="false">
-      <arg value="-rf"/>
-      <arg value="repo"/>
-    </exec>
+    <delete dir="${git.repo.dir}" quiet="true"/>
     <exec executable="git" failonerror="true">
-      <arg line="clone ${GIT_REPO} repo"/>
+      <arg value="clone"/>
+      <arg value="${git.repo.url}"/>
+      <arg value="${git.repo.dir}"/>
     </exec>
   </target>
 
-  <!-- ==========================================================
-       DEPLOY APIs
-  ========================================================== -->
+  <!-- ================== DEPLOY ALL APIs ================== -->
   <target name="deploy-apis" depends="git-clone">
     <echo message=":rocket: Deploying APIs to API Manager..."/>
     <foreach target="deploy-single-api" param="apiFile">
       <path>
-        <!-- Scan all YAML files inside repo/apis/*/* -->
-        <fileset dir="repo/apis" includes="**/*.yaml"/>
+        <fileset dir="${git.repo.dir}/apis" includes="**/*.yaml"/>
       </path>
     </foreach>
   </target>
 
-  <!-- ==========================================================
-       DEPLOY SINGLE API
-  ========================================================== -->
+  <!-- ================== DEPLOY SINGLE API ================== -->
   <target name="deploy-single-api">
-    <echo message="Processing API: @{apiFile}"/>
+    <echo>Processing API: @{apiFile}</echo>
 
-    <!-- Extract base filename (hello_1.0.0.yaml → hello_1.0.0) -->
-    <basename property="apiBaseName" file="@{apiFile}" suffix=".yaml"/>
-
-    <!-- Split into name and version -->
-    <propertyregex property="apiName" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\1"/>
-    <propertyregex property="apiVersion" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\2"/>
-
-    <echo message="Detected API Name: ${apiName}, Version: ${apiVersion}"/>
+    <!-- Extract Name and Version -->
+    <loadfile property="apiContent" srcFile="@{apiFile}"/>
+    <script language="javascript">
+      var yaml = project.getProperty("apiContent");
+      var nameMatch = yaml.match(/name:\s*([a-zA-Z0-9-_]+)/);
+      var verMatch = yaml.match(/version:\s*([0-9.]+)/);
+      project.setProperty("apiName", nameMatch ? nameMatch[1] : "unknown");
+      project.setProperty("apiVersion", verMatch ? verMatch[1] : "1.0.0");
+    </script>
+    <echo>Detected API Name: ${apiName}, Version: ${apiVersion}</echo>
 
     <!-- Try update -->
     <exec executable="apic" failonerror="false" resultproperty="updateResult">
-      <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion} @{apiFile}"/>
+      <arg value="apis:update"/>
+      <arg value="${apiName}:${apiVersion}"/>
+      <arg value="@{apiFile}"/>
+      <arg value="--scope"/>
+      <arg value="catalog"/>
+      <arg value="--server"/>
+      <arg value="${mgmtServer}"/>
+      <arg value="--org"/>
+      <arg value="${orgName}"/>
+      <arg value="--catalog"/>
+      <arg value="${catalogName}"/>
     </exec>
 
-    <!-- If update failed → create -->
-    <if>
-      <equals arg1="${updateResult}" arg2="0"/>
-      <then>
-        <echo message=":arrows_counterclockwise: Updated API ${apiName}:${apiVersion}"/>
-      </then>
-      <else>
-        <echo message=":sparkles: Creating API ${apiName}:${apiVersion}"/>
-        <exec executable="apic" failonerror="true">
-          <arg line="apis:create @{apiFile} --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME}"/>
-        </exec>
-      </else>
-    </if>
-  </target>
+    <!-- If update fails, publish -->
+    <condition property="updateFailed">
+      <not><equals arg1="${updateResult}" arg2="0"/></not>
+    </condition>
 
-  <!-- ==========================================================
-       BULK CI ENTRY POINT
-  ========================================================== -->
-  <target name="bulk-ci" depends="login,deploy-apis">
-    <echo message=":white_check_mark: Bulk CI completed."/>
+    <if condition="${updateFailed}">
+      <then>
+        <echo>:sparkles: Creating API ${apiName}:${apiVersion}</echo>
+        <exec executable="apic" failonerror="true">
+          <arg value="publish"/>
+          <arg value="@{apiFile}"/>
+          <arg value="--server"/>
+          <arg value="${mgmtServer}"/>
+          <arg value="--org"/>
+          <arg value="${orgName}"/>
+          <arg value="--catalog"/>
+          <arg value="${catalogName}"/>
+        </exec>
+      </then>
+    </if>
   </target>
 
 </project>
