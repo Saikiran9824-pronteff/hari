@@ -65,74 +65,61 @@
     <echo message="Detected API Name: ${apiName}, Version: ${apiVersion}"/>
 
     <!-- Check if API exists -->
-    <exec executable="apic" failonerror="false" resultproperty="apiExists">
-      <arg value="apis:get"/>
-      <arg value="--server"/>
-      <arg value="${APIC_SERVER}"/>
-      <arg value="--org"/>
-      <arg value="${APIC_ORG}"/>
-      <arg value="--catalog"/>
-      <arg value="${CATALOG_NAME}"/>
-      <arg value="--scope"/>
-      <arg value="catalog"/>
-      <arg value="${apiName}:${apiVersion}"/>
-    </exec>
+<exec executable="apic" failonerror="false" resultproperty="apiExists" outputproperty="apiOutput">
+    <arg value="apis:get"/>
+    <arg value="${apiName}:${apiVersion}"/>
+    <arg value="--server"/>
+    <arg value="${APIC_SERVER}"/>
+    <arg value="--org"/>
+    <arg value="${APIC_ORG}"/>
+    <arg value="--catalog"/>
+    <arg value="${CATALOG_NAME}"/>
+    <arg value="--scope"/>
+    <arg value="catalog"/>
+</exec>
 
-    <if>
-      <equals arg1="${apiExists}" arg2="0"/>
-      <then>
-        <echo message=":arrows_counterclockwise: API exists, updating ${apiName}:${apiVersion}"/>
-        <exec executable="apic" failonerror="true">
-          <arg value="apis:update"/>
-          <arg value="--server"/>
-          <arg value="${APIC_SERVER}"/>
-          <arg value="--org"/>
-          <arg value="${APIC_ORG}"/>
-          <arg value="--catalog"/>
-          <arg value="${CATALOG_NAME}"/>
-          <arg value="--scope"/>
-          <arg value="catalog"/>
-          <arg value="${apiName}:${apiVersion}"/>
-          <arg value="${apiFile}"/>
-        </exec>
-      </then>
-      <else>
+<echo message="APIs:get output: ${apiOutput}"/>
+
+<if>
+    <contains string="${apiOutput}" substring="Not found"/>
+    <then>
         <echo message="🆕 API not found. Creating draft and publishing ${apiName}:${apiVersion}"/>
         <exec executable="apic" failonerror="true">
-          <arg value="draft-apis:create"/>
-          <arg value="${apiFile}"/>
-          <arg value="--server"/>
-          <arg value="${APIC_SERVER}"/>
-          <arg value="--org"/>
-          <arg value="${APIC_ORG}"/>
+            <arg value="draft-apis:create"/>
+            <arg value="${apiFile}"/>
+            <arg value="--server"/>
+            <arg value="${APIC_SERVER}"/>
+            <arg value="--org"/>
+            <arg value="${APIC_ORG}"/>
         </exec>
         <exec executable="apic" failonerror="true">
-          <arg value="publish"/>
-          <arg value="${apiFile}"/>
-          <arg value="--server"/>
-          <arg value="${APIC_SERVER}"/>
-          <arg value="--org"/>
-          <arg value="${APIC_ORG}"/>
-          <arg value="--catalog"/>
-          <arg value="${CATALOG_NAME}"/>
+            <arg value="publish"/>
+            <arg value="${apiFile}"/>
+            <arg value="--server"/>
+            <arg value="${APIC_SERVER}"/>
+            <arg value="--org"/>
+            <arg value="${APIC_ORG}"/>
+            <arg value="--catalog"/>
+            <arg value="${CATALOG_NAME}"/>
         </exec>
-      </else>
-    </if>
-
-    <echo message=":white_check_mark: Completed API ${apiName}:${apiVersion}"/>
-  </target>
-
-  <!-- ==========================================================
-       DEPLOY ALL APIs
-  ========================================================== -->
-  <target name="deploy-apis" depends="git-clone,login">
-    <echo message=":rocket: Deploying all APIs to API Manager..."/>
-    <foreach target="deploy-single-api" param="apiFile">
-      <path>
-        <fileset dir="repo/apis" includes="**/*.yaml"/>
-      </path>
-    </foreach>
-  </target>
+    </then>
+    <else>
+        <echo message="♻️ API exists. Updating ${apiName}:${apiVersion}"/>
+        <exec executable="apic" failonerror="true">
+            <arg value="apis:update"/>
+            <arg value="${apiName}:${apiVersion}"/>
+            <arg value="${apiFile}"/>
+            <arg value="--server"/>
+            <arg value="${APIC_SERVER}"/>
+            <arg value="--org"/>
+            <arg value="${APIC_ORG}"/>
+            <arg value="--catalog"/>
+            <arg value="${CATALOG_NAME}"/>
+            <arg value="--scope"/>
+            <arg value="catalog"/>
+        </exec>
+    </else>
+</if>
 
   <!-- ==========================================================
        BULK CI ENTRY POINT
