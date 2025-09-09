@@ -49,7 +49,7 @@
   <!-- ==========================================================
        DEPLOY SINGLE API
   ========================================================== -->
-  <target name="deploy-single-api">
+  <target name="deploy-single-api" unless="apiFile.empty">
     <echo message="Processing API: @{apiFile}"/>
 
     <basename property="apiBaseName" file="@{apiFile}" suffix=".yaml"/>
@@ -80,7 +80,19 @@
             <echo message=":arrows_counterclockwise: Updated API ${apiName}:${apiVersion}"/>
         </else>
     </if>
-</target>
+  </target>
+
+  <!-- ==========================================================
+       DEPLOY ALL APIs
+  ========================================================== -->
+  <target name="deploy-apis" depends="git-clone,login">
+    <echo message=":rocket: Deploying APIs to API Manager..."/>
+    <foreach target="deploy-single-api" param="apiFile">
+      <path>
+        <fileset dir="repo/apis" includes="**/*.yaml"/>
+      </path>
+    </foreach>
+  </target>
 
   <!-- ==========================================================
        BULK CI ENTRY POINT
