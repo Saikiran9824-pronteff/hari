@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="bulk-ci" default="deploy-apis">
+<project name="apic-cicd" default="bulk-ci" basedir=".">
 
   <!-- ================== PROPERTIES ================== -->
   <property name="git.repo.url" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
