@@ -48,7 +48,17 @@
   <!-- ==========================================================
        DEPLOY APIs
   ========================================================== -->
-   <!-- ==========================================================
+  <target name="deploy-apis" depends="git-clone">
+    <echo message=":rocket: Deploying APIs to API Manager..."/>
+    <foreach target="deploy-single-api" param="apiFile">
+      <path>
+        <!-- Scan all YAML files inside repo/apis/*/* -->
+        <fileset dir="repo/apis" includes="**/*.yaml"/>
+      </path>
+    </foreach>
+  </target>
+
+  <!-- ==========================================================
        DEPLOY SINGLE API
   ========================================================== -->
   <target name="deploy-single-api">
@@ -82,7 +92,6 @@
       </else>
     </if>
   </target>
-
 
   <!-- ==========================================================
        BULK CI ENTRY POINT
