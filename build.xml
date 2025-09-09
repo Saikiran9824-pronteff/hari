@@ -1,10 +1,14 @@
 <project name="apic-cicd" default="bulk-ci" basedir=".">
 
-  <!-- Load Ant-Contrib -->
+  <!-- ==========================================================
+       Load Ant-Contrib
+  ========================================================== -->
   <taskdef resource="net/sf/antcontrib/antcontrib.properties"
            classpath="lib/ant-contrib-1.0b3.jar"/>
 
-  <!-- Properties -->
+  <!-- ==========================================================
+       Properties
+  ========================================================== -->
   <property name="GIT_REPO" value="https://github.com/Saikiran9824-pronteff/hari.git"/>
   <property name="APIC_SERVER" value="https://small-1-mgmt-api-manager-cp4i.apps.ocp.prontefflabs.com"/>
   <property name="APIC_ORG" value="induapi-np"/>
@@ -14,15 +18,27 @@
   <property name="APIC_PASSWORD" value="${env.APIC_PASSWORD}"/>
   <property name="CATALOG_NAME" value="prod"/>
 
-  <!-- LOGIN -->
+  <!-- ==========================================================
+       LOGIN
+  ========================================================== -->
   <target name="login">
     <echo message=":closed_lock_with_key: Logging in to API Connect..."/>
     <exec executable="apic" failonerror="true">
-      <arg line="login --server ${APIC_SERVER} --username ${APIC_USER} --password ${APIC_PASSWORD} --realm ${APIC_REALM}"/>
+      <arg value="login"/>
+      <arg value="--server"/>
+      <arg value="${APIC_SERVER}"/>
+      <arg value="--username"/>
+      <arg value="${APIC_USER}"/>
+      <arg value="--password"/>
+      <arg value="${APIC_PASSWORD}"/>
+      <arg value="--realm"/>
+      <arg value="${APIC_REALM}"/>
     </exec>
   </target>
 
-  <!-- GIT CLONE -->
+  <!-- ==========================================================
+       GIT CLONE
+  ========================================================== -->
   <target name="git-clone">
     <echo message=":inbox_tray: Cloning GitHub repo..."/>
     <exec executable="rm" failonerror="false">
@@ -30,14 +46,19 @@
       <arg value="repo"/>
     </exec>
     <exec executable="git" failonerror="true">
-      <arg line="clone ${GIT_REPO} repo"/>
+      <arg value="clone"/>
+      <arg value="${GIT_REPO}"/>
+      <arg value="repo"/>
     </exec>
   </target>
 
-  <!-- DEPLOY SINGLE API -->
+  <!-- ==========================================================
+       DEPLOY SINGLE API
+  ========================================================== -->
   <target name="deploy-single-api">
     <echo message="Processing API: ${apiFile}"/>
 
+    <!-- Extract API name and version -->
     <basename property="apiBaseName" file="${apiFile}" suffix=".yaml"/>
     <propertyregex property="apiName" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\1"/>
     <propertyregex property="apiVersion" input="${apiBaseName}" regexp="^(.*)_([0-9]+\.[0-9]+\.[0-9]+)$" select="\2"/>
@@ -45,30 +66,65 @@
 
     <!-- Check if API exists -->
     <exec executable="apic" failonerror="false" resultproperty="apiExists">
-      <arg line="apis:get --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion}"/>
+      <arg value="apis:get"/>
+      <arg value="--server"/>
+      <arg value="${APIC_SERVER}"/>
+      <arg value="--org"/>
+      <arg value="${APIC_ORG}"/>
+      <arg value="--catalog"/>
+      <arg value="${CATALOG_NAME}"/>
+      <arg value="--scope"/>
+      <arg value="catalog"/>
+      <arg value="${apiName}:${apiVersion}"/>
     </exec>
 
     <if>
       <equals arg1="${apiExists}" arg2="0"/>
       <then>
-        <echo message="♻️ Updating existing API ${apiName}:${apiVersion}"/>
+        <echo message=":arrows_counterclockwise: API exists, updating ${apiName}:${apiVersion}"/>
         <exec executable="apic" failonerror="true">
-          <arg line="apis:update --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME} --scope catalog ${apiName}:${apiVersion} ${apiFile}"/>
+          <arg value="apis:update"/>
+          <arg value="--server"/>
+          <arg value="${APIC_SERVER}"/>
+          <arg value="--org"/>
+          <arg value="${APIC_ORG}"/>
+          <arg value="--catalog"/>
+          <arg value="${CATALOG_NAME}"/>
+          <arg value="--scope"/>
+          <arg value="catalog"/>
+          <arg value="${apiName}:${apiVersion}"/>
+          <arg value="${apiFile}"/>
         </exec>
       </then>
       <else>
         <echo message="🆕 API not found. Creating draft and publishing ${apiName}:${apiVersion}"/>
         <exec executable="apic" failonerror="true">
-          <arg line="draft-apis:create ${apiFile} --server ${APIC_SERVER} --org ${APIC_ORG}"/>
+          <arg value="draft-apis:create"/>
+          <arg value="${apiFile}"/>
+          <arg value="--server"/>
+          <arg value="${APIC_SERVER}"/>
+          <arg value="--org"/>
+          <arg value="${APIC_ORG}"/>
         </exec>
         <exec executable="apic" failonerror="true">
-          <arg line="publish ${apiFile} --server ${APIC_SERVER} --org ${APIC_ORG} --catalog ${CATALOG_NAME}"/>
+          <arg value="publish"/>
+          <arg value="${apiFile}"/>
+          <arg value="--server"/>
+          <arg value="${APIC_SERVER}"/>
+          <arg value="--org"/>
+          <arg value="${APIC_ORG}"/>
+          <arg value="--catalog"/>
+          <arg value="${CATALOG_NAME}"/>
         </exec>
       </else>
     </if>
+
+    <echo message=":white_check_mark: Completed API ${apiName}:${apiVersion}"/>
   </target>
 
-  <!-- DEPLOY ALL APIs -->
+  <!-- ==========================================================
+       DEPLOY ALL APIs
+  ========================================================== -->
   <target name="deploy-apis" depends="git-clone,login">
     <echo message=":rocket: Deploying all APIs to API Manager..."/>
     <foreach target="deploy-single-api" param="apiFile">
@@ -78,7 +134,9 @@
     </foreach>
   </target>
 
-  <!-- BULK CI ENTRY POINT -->
+  <!-- ==========================================================
+       BULK CI ENTRY POINT
+  ========================================================== -->
   <target name="bulk-ci" depends="deploy-apis">
     <echo message=":white_check_mark: Bulk CI completed."/>
   </target>
